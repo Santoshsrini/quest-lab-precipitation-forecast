@@ -10,7 +10,7 @@ The selection task (Project 1): fetch precipitation forecasts from ECMWF Open Da
 
 ## 1. Product Requirements
 
-**Deadline:** within 3 days (by about 17 Nov 2026).
+**Deadline:** 15 Nov 2026.
 **Deliverables:** a live deployed URL, a GitHub repository, and a demo or presentation.
 
 **Guiding principle:** get it working functionally first. Start with a simple version, then add to it.
@@ -45,7 +45,7 @@ The selection task (Project 1): fetch precipitation forecasts from ECMWF Open Da
 
 ### Open point
 
-- **The innovative element.** The brief asks for an "innovative front end and user experience" and Phase 1 is deliberately plain. Santosh will decide what to add once Phase 1 works. Risk: with a 3-day deadline, Phase 1 must be finished early enough to leave time for it.
+- **The innovative element.** The brief asks for an "innovative front end and user experience" and Phase 1 is deliberately plain. Santosh will decide what to add once Phase 1 works. Risk: the deadline is 15 Nov, so there may be little or no time for it after Phase 1.
 
 ## 2. User Flow / App Flow
 
@@ -86,7 +86,67 @@ The app is a single screen. There are no separate pages.
 
 ## 3. Tech Stack Specification
 
-*To be filled.*
+### Constraints
+
+- **Easy to build and minimal.** This is the main rule for every choice.
+- Santosh is comfortable with Python and with plain HTML, CSS and JavaScript, is mostly new to web development, and is not familiar with React. He must be able to explain the code in the demo.
+- The forecast must work for any point on the map.
+- Accounts available: GitHub and Netlify.
+- The deadline is 15 Nov 2026.
+
+### The stack
+
+**Overall shape:** two parts and no server.
+
+1. A Python script downloads the newest forecast and saves it as small files.
+2. A web page, made of static files, reads those files in the browser.
+
+**Front end**
+
+| Need | Choice | Why |
+|---|---|---|
+| Page | Plain HTML, CSS and JavaScript. No React, no build tools. | Santosh knows it and can explain every line. Nothing to install or compile. |
+| Map | Leaflet 1.9.4, loaded from a CDN, with OpenStreetMap map images | The simplest map library. Zoom, drag and click work out of the box. Free, no key. |
+| Bar chart | Drawn with plain HTML and CSS | Eight bars do not need a chart library. |
+| Place search and place names | Photon (photon.komoot.io) | Free, no key, and built for suggestions while typing. Also turns a clicked point into a place name. |
+| Time zone of the picked point | `tz-lookup`, a small JavaScript library | Works in the browser from latitude and longitude. No service to call. |
+| Sunrise, sunset, dusk | SunCalc, a small JavaScript library | Calculated in the browser. No service to call. |
+
+**Back end (data script)**
+
+| Need | Choice | Why |
+|---|---|---|
+| Language | Python 3.10 or later | Already installed. Santosh knows it. |
+| Download | `ecmwf-opendata` | ECMWF's own package for this data. |
+| Read the GRIB2 files | `xarray` with `cfgrib` and `eccodes` | The standard way to read this format in Python. |
+| Calculations | `numpy` | Subtracting one time step from the previous one, and converting metres to mm. |
+| Output | Small files, one per map area, each holding every time step for that area | The browser downloads only the one file that covers the picked point. This is what makes any point on the globe work without a server. |
+
+**Hosting and schedule**
+
+| Need | Choice | Why |
+|---|---|---|
+| Code | GitHub repository (public) | A required deliverable. |
+| Scheduled data job | GitHub Actions, every 6 hours | Free. Runs the Python script when ECMWF publishes a new forecast. |
+| Website | GitHub Pages | The same scheduled job that makes the data files also publishes the site, in one step. |
+
+**Why GitHub Pages and not Netlify.** Both would serve the page equally well. With Netlify, the scheduled job on GitHub would have to hand the fresh data files to Netlify every 6 hours, using either a stored access token or commits of data files that make the repository grow without limit. GitHub for both has fewer parts. Netlify stays available as a fallback.
+
+**Versions**
+
+- Leaflet 1.9.4.
+- Every other package is fixed to an exact version when it is first installed and tested, and written into `requirements.txt` (Python) or into the page's CDN links (JavaScript). The versions are then listed here.
+- Node is not needed.
+
+**On the laptop**
+
+- A separate Python environment for this project, so its packages do not affect anything else.
+- The page is previewed locally with Python's built-in web server.
+
+### To check when building starts
+
+- That Photon, OpenStreetMap map images and the two JavaScript libraries work as described and their usage rules allow this app.
+- That `eccodes` installs cleanly on the Mac and on GitHub Actions.
 
 ## 4. Content Guidelines
 
@@ -117,3 +177,8 @@ The app is a single screen. There are no separate pages.
 | 14 Nov 2026 | Search suggests places while typing | Avoids picking the wrong place when names are shared |
 | 14 Nov 2026 | Usable on a phone; "About this location" stays beside the forecast on every screen size | Santosh's choice: same side-by-side layout as the days |
 | 14 Nov 2026 | Pin on the selected point; new selection replaces the forecast; closing removes the pin; place-name heading; loading indicator; "Try again" on failure | Proposed by Claude to fill gaps in the flow, accepted by Santosh |
+| 14 Nov 2026 | Deadline corrected to 15 Nov 2026 (first recorded as "within 3 days") | Santosh's correction |
+| 14 Nov 2026 | No server: a scheduled Python script prepares small data files, split by map area, that the browser reads directly | Simplest and most reliable; works for any point on the globe; free |
+| 14 Nov 2026 | Front end in plain HTML, CSS and JavaScript with Leaflet; no React, no build tools | Santosh knows it and must explain it; nothing to compile; one day left |
+| 14 Nov 2026 | Python with `ecmwf-opendata`, `xarray`, `cfgrib` and `numpy` for the data script | Standard tools for ECMWF data; Santosh knows Python |
+| 14 Nov 2026 | GitHub for everything: repository, scheduled job (Actions) and website (Pages) | One step publishes data and site together; fewer parts than adding Netlify |
