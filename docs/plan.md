@@ -57,10 +57,11 @@ The app is a single screen. There are no separate pages.
 2. **Choose a location**, in either of two ways:
    - **Search:** type a place name such as "Chennai" or "Bangalore" in the search bar. A dropdown suggests matching places while the user types (for example "Chennai, Tamil Nadu, India") and the user picks one.
    - **Map:** zoom in, zoom out and drag the map (as on windy.com), then click a point. That point becomes the selected location.
-3. **See the forecast.** A panel opens at the bottom of the screen. It shows:
+3. **See the quick answer.** A white dot marks the point, and a small summary box attached to the dot appears with the place name, the rain expected in the next 3 hours, the total for the next 24 hours, a down arrow and a small cross.
+4. **See the full forecast.** Pressing the down arrow makes the summary box disappear. The white dot stays, and a panel opens at the bottom of the screen. It shows:
    - the precipitation forecast for the selected location
    - beside the forecast, an "About this location" section with details such as the coordinates
-4. **Close the panel** by pressing the cross mark.
+5. **Close the panel** by pressing its cross mark. Everything goes, the white dot included, and the app returns to its opening state.
 
 ### Bottom panel behaviour
 
@@ -76,13 +77,16 @@ The app is a single screen. There are no separate pages.
 
 ### Detailed behaviour
 
-- **Marker:** a pin appears on the map at the selected point, so the user can see what the panel refers to.
-- **After a search:** the map moves to the chosen place, drops the pin and opens the panel.
-- **Choosing again:** clicking another point, or searching again, while the panel is open replaces the forecast in the panel. The user does not need to close it first.
-- **After closing:** the pin is removed and the app returns to its opening state.
-- **Place name:** the panel has a heading with the name of the place. For a search this is the name the user chose. For a map click it is the nearest named place if one can be found, otherwise the coordinates.
-- **While loading:** the panel opens immediately with a loading indicator, then fills in.
-- **If the forecast cannot be loaded:** the panel shows a short message and a "Try again" button.
+- **Marker:** a white dot appears on the map at the selected point, so the user can see what the summary box or the panel refers to.
+- **One thing at a time:** the summary box and the panel are never on screen together. The down arrow swaps the box for the panel.
+- **After a search:** the map moves to the chosen place, places the white dot and shows the summary box.
+- **Summary box cross:** pressing it removes the box and the white dot, and the app returns to its opening state.
+- **Panel cross:** pressing it removes the panel and the white dot, and the app returns to its opening state.
+- **Choosing again while the summary box is showing:** the white dot and the summary box move to the new place.
+- **Choosing again while the panel is open:** the white dot moves to the new place and the panel stays open and shows the new forecast. No summary box appears.
+- **Place name:** the summary box and the panel both have a heading with the name of the place, and the search bar shows it too. For a search this is the name the user chose. For a map click it is the nearest named place if one can be found, otherwise the coordinates.
+- **While loading:** the summary box appears immediately with a loading indicator, then fills in.
+- **If the forecast cannot be loaded:** the summary box shows a short message and a "Try again" button.
 
 ## 3. Tech Stack Specification
 
@@ -106,7 +110,7 @@ The app is a single screen. There are no separate pages.
 | Need | Choice | Why |
 |---|---|---|
 | Page | Plain HTML, CSS and JavaScript. No React, no build tools. | Santosh knows it and can explain every line. Nothing to install or compile. |
-| Map | Leaflet 1.9.4, loaded from a CDN, with OpenStreetMap map images | The simplest map library. Zoom, drag and click work out of the box. Free, no key. |
+| Map | Leaflet 1.9.4, loaded from a CDN, with a free dark grey map style (see section 4; exact style confirmed when building starts) | The simplest map library. Zoom, drag and click work out of the box. Free, no key. |
 | Bar chart | Drawn with plain HTML and CSS | Eight bars do not need a chart library. |
 | Place search and place names | Photon (photon.komoot.io) | Free, no key, and built for suggestions while typing. Also turns a clicked point into a place name. |
 | Time zone of the picked point | `tz-lookup`, a small JavaScript library | Works in the browser from latitude and longitude. No service to call. |
@@ -145,12 +149,67 @@ The app is a single screen. There are no separate pages.
 
 ### To check when building starts
 
-- That Photon, OpenStreetMap map images and the two JavaScript libraries work as described and their usage rules allow this app.
+- That Photon, the dark map style and the two JavaScript libraries work as described and their usage rules allow this app.
 - That `eccodes` installs cleanly on the Mac and on GitHub Actions.
 
 ## 4. Content Guidelines
 
-*To be filled.*
+The look takes inspiration from windy.com. It is not a copy: we borrow the general layout and feel, and do not reproduce Windy's logo, branding, stylesheet or exact design.
+
+### Decisions
+
+- **App name: Varsha** (the Sanskrit word for rain). Used in the browser tab and as the page's name.
+- **Map style: dark grey**, like the reference: a plain dark map with thin borders and pale labels. The exact free style is confirmed when building starts.
+- **Marker:** a white dot at the selected point.
+- **Summary box:** a small box attached to the white dot, with the place name, the rain in the next 3 hours, the total for the next 24 hours, a down arrow and a small cross.
+- **Panel colours: light.** A white or near-white panel with dark text, on the dark map.
+- **Panel order, left to right:** forecast for the day, later days (Phase 2), then "About this location" last.
+- **Rain wording:** each bar shows its amount, such as "4.2 mm". Above the chart, one plain sentence sums up the next 24 hours, for example "Rain likely this evening, 12 mm in total" or "No rain expected in the next 24 hours".
+- **Search bar:** shows the name of the selected place.
+- **Styles:** Varsha has its own small set of styles (colours, font, rounded search bar, panel), written from what the reference screenshots show. Windy's stylesheet is not used.
+- **Rainfall colours on the map:** Phase 2, as section 1 says.
+
+### Text and credits
+
+- **Units:** rainfall in mm.
+- **Times:** 12-hour clock in the selected place's local time, for example "3 PM".
+- **Forecast source line:** the panel states where the numbers come from and how fresh they are, for example "ECMWF IFS forecast, issued 14 Nov, 12:00 UTC".
+- **Credits, always visible in a corner of the map:** ECMWF (its open data licence, CC BY 4.0, requires credit), OpenStreetMap contributors, and the provider of the map style.
+
+### Reference screenshots
+
+Five screenshots of windy.com, kept in `docs/screenshots/` on Santosh's laptop and not committed, because they are images of another company's site and this repository is public.
+
+**Screenshot 1: overall layout, fully zoomed out**
+
+- Take: a search bar at the top left; the map filling the whole screen; continent names and ocean names on the map; a bottom panel that expands to hold the selected location's information.
+- Leave out: the share button beside the search bar; the Windy logo; the menu and every button and symbol on the right-hand side.
+
+**Screenshot 2: zoomed in one step**
+
+- Take: country names appear on the map (India, Pakistan and so on) in place of continent names.
+
+**Screenshot 3: zoomed in further**
+
+- Take: local places appear (cities and towns), and the map stops at a maximum zoom level.
+- Leave out: the temperature shown under each city name.
+
+**Screenshot 4: a location is selected, panel open**
+
+- Take: the white dot at the selected point; the place's name in the search bar; the bottom panel with the forecast; later days to the right, each under its own heading such as "Saturday 14" (Phase 2); "About this location" at the far right.
+- Already decided differently: the forecast is a bar chart of rainfall, where the screenshot uses a table of many weather values.
+- Leave out: temperature, wind and the other weather rows; weather icons; the red bar of forecast types beneath the panel; "Nearest weather stations".
+
+**Screenshot 5: summary box beside the selected point**
+
+- Take: a small box attached to the white dot with the rain amount, a cross, and a down arrow that opens the bottom panel.
+
+Labels changing with zoom (continents and oceans, then countries, then cities and towns) come from the map style we choose, not from code we write.
+
+### Open points
+
+- **Continent and ocean names:** whether the chosen dark map style shows them when zoomed out, as the reference does. To check when the style is confirmed.
+- **Summary sentence rules:** the exact wording, and the rainfall amounts at which it changes. To be written in section 5 or 6.
 
 ## 5. Back End: Data Fetching and Processing
 
@@ -182,3 +241,13 @@ The app is a single screen. There are no separate pages.
 | 14 Nov 2026 | Front end in plain HTML, CSS and JavaScript with Leaflet; no React, no build tools | Santosh knows it and must explain it; nothing to compile; one day left |
 | 14 Nov 2026 | Python with `ecmwf-opendata`, `xarray`, `cfgrib` and `numpy` for the data script | Standard tools for ECMWF data; Santosh knows Python |
 | 14 Nov 2026 | GitHub for everything: repository, scheduled job (Actions) and website (Pages) | One step publishes data and site together; fewer parts than adding Netlify |
+| 14 Nov 2026 | Look inspired by windy.com, not copied; Windy's stylesheet is not used | Santosh's content guidelines; inspiration, not a clone |
+| 14 Nov 2026 | App name: Varsha | Santosh's choice |
+| 14 Nov 2026 | Dark grey map style, replacing standard OpenStreetMap images | Matches Santosh's reference screenshots |
+| 14 Nov 2026 | Light bottom panel on the dark map | Matches Screenshot 4 |
+| 14 Nov 2026 | Each bar shows mm; one plain sentence sums up the next 24 hours | Numbers for detail, a sentence for a quick answer |
+| 14 Nov 2026 | Search bar shows the selected place's name | From Screenshot 4 |
+| 14 Nov 2026 | Marker is a white dot, replacing the pin | Santosh's choice, from the screenshots |
+| 14 Nov 2026 | A summary box appears first; its down arrow swaps it for the bottom panel. Replaces "panel opens at once" | Santosh's choice from Screenshot 5; one thing on screen at a time |
+| 14 Nov 2026 | The panel's cross and the summary box's cross each clear the whole selection, white dot included | Santosh's clarification |
+| 14 Nov 2026 | Picking another place while the panel is open updates the panel in place | Quick for comparing places |
