@@ -131,7 +131,7 @@ The app is a single screen. There are no separate pages.
 | Need | Choice | Why |
 |---|---|---|
 | Code | GitHub repository (public) | A required deliverable. |
-| Scheduled data job | GitHub Actions, every 6 hours | Free. Runs the Python script when ECMWF publishes a new forecast. |
+| Scheduled data job | GitHub Actions, four times a day (see section 5) | Free. Runs the Python script when ECMWF publishes a new forecast. |
 | Website | GitHub Pages | The same scheduled job that makes the data files also publishes the site, in one step. |
 
 **Why GitHub Pages and not Netlify.** Both would serve the page equally well. With Netlify, the scheduled job on GitHub would have to hand the fresh data files to Netlify every 6 hours, using either a stored access token or commits of data files that make the repository grow without limit. GitHub for both has fewer parts. Netlify stays available as a fallback.
@@ -213,7 +213,68 @@ Labels changing with zoom (continents and oceans, then countries, then cities an
 
 ## 5. Back End: Data Fetching and Processing
 
-*To be filled.*
+### Outline
+
+A timed script fetches the ECMWF Open Data forecast, processes it to extract the values the front end needs, and stores the result where the front end loads it from.
+
+### What the ECMWF server holds (checked live on 14 Nov 2026, 16:09 UTC)
+
+- **Runs:** four a day, starting at 00, 06, 12 and 18 UTC. All four are published under the same stream name, `oper`.
+- **When a run appears:** about 6.5 to 7.5 hours after it starts. The 00 UTC run appeared at 07:34 UTC and the 06 UTC run at 12:27 UTC.
+- **Time steps:** every 3 hours out to 144 hours (6 days), for every run. There is no 1-hour step. The 00 and 12 UTC runs continue beyond that in 6-hour steps.
+- **Rain field:** named `tp`. Each time step's `tp` is about 330 KB, inside a much larger file of some 55 weather fields. The `ecmwf-opendata` package downloads only the `tp` part.
+- **Meaning of `tp`:** total precipitation in metres since the start of the run. Rain within one 3-hour block is this step's value minus the previous step's value.
+- **Grid:** the whole globe at 0.25° spacing, about 25 km. That is 721 rows by 1440 columns, about 1 million points.
+
+Not yet checked: how many days a run stays on the server, and the exact latitude and longitude order inside the file. Both are checked on the first download.
+
+### Model
+
+IFS only (decided in section 1, because AIFS has 6-hour steps). The single main forecast, not the 51-run ensemble.
+
+### The method, step by step
+
+1. **Find the newest run** that the server has published. If the newest one is not complete yet, use the one before it.
+2. **Download `tp`** for steps 3, 6, 9 and so on up to 72 hours: 24 steps, about 8 MB in total.
+3. **Read** each step into a grid of numbers with `xarray` and `cfgrib`.
+4. **Work out rain per block:** subtract the previous step from each step (the first block is simply step 3), multiply by 1000 to turn metres into mm, set any tiny negative results to zero, and round to 0.1 mm.
+5. **Cut the globe into tiles** of 10° by 10°. That gives 648 tiles, each holding 40 by 40 grid points and all 24 blocks for each point.
+6. **Save each tile as a JSON file**, with rain stored as whole numbers of tenths of a mm to keep files small. Each file is about 100 KB before compression. JSON is chosen because a person can open a file and read the numbers.
+7. **Save one small information file** (`meta.json`) with the run's start time, the start time of each block, and the grid layout.
+8. **Publish:** the scheduled job puts these files beside the web page and publishes both to GitHub Pages.
+
+### How the front end uses the files
+
+1. On opening, the page loads `meta.json`.
+2. When the user picks a point, the page finds the nearest grid point, works out which tile holds it, and downloads that one tile.
+3. It reads the 24 values for that grid point, keeps the block containing the present moment and the 7 blocks after it, and shows those 8.
+
+The value shown is the forecast for the grid point nearest to the picked spot. There is no blending between neighbouring points, so every number on screen is one the model produced.
+
+### Why 72 hours when the panel shows 24
+
+- A run is already about 7 hours old when published, and up to about 14 hours old just before the next one replaces it. Showing 24 hours ahead therefore needs steps out to about 40 hours.
+- The extra, up to 72 hours, keeps the app working if one or several scheduled jobs fail.
+- It also gives Phase 2 a start. Showing more days later means changing one number in the script.
+
+### Schedule
+
+- GitHub Actions runs the script four times a day, at about 01:00, 08:00, 13:00 and 20:00 UTC, shortly after each run normally appears.
+- GitHub may start a scheduled job late. That only delays the refresh.
+
+### When something goes wrong
+
+- **A job fails:** the site keeps the previous data. Nothing breaks for the user.
+- **Data is getting old:** the panel always shows when the forecast was issued. If the stored data no longer covers a full 24 hours ahead, the panel shows the blocks it has and says so.
+
+### A consequence for the labels
+
+The 3-hour blocks sit on UTC boundaries: 00:00, 03:00, 06:00 UTC and so on. In India (UTC+5:30) those are 5:30, 8:30, 11:30 and so on. A bar in India therefore reads "2:30 PM to 5:30 PM", not "3 PM to 6 PM" as in the examples in sections 1 and 4. Shifting the blocks to round local hours would mean inventing values, so we keep the true boundaries.
+
+### How we check the numbers are right
+
+- On the first download, print the 8 blocks for a few known places, such as Bengaluru and a place where it is raining that day, and compare them with the ECMWF forecast shown on a public weather site.
+- Check that no value is negative and that the grid has 721 by 1440 points.
 
 ## 6. Implementation
 
@@ -251,3 +312,8 @@ Labels changing with zoom (continents and oceans, then countries, then cities an
 | 14 Nov 2026 | A summary box appears first; its down arrow swaps it for the bottom panel. Replaces "panel opens at once" | Santosh's choice from Screenshot 5; one thing on screen at a time |
 | 14 Nov 2026 | The panel's cross and the summary box's cross each clear the whole selection, white dot included | Santosh's clarification |
 | 14 Nov 2026 | Picking another place while the panel is open updates the panel in place | Quick for comparing places |
+| 14 Nov 2026 | Download only the `tp` field of the IFS main forecast, 24 steps covering 72 hours | Small download; covers 24 hours ahead even when the run is old or jobs fail |
+| 14 Nov 2026 | Store the result as 648 JSON tiles of 10° by 10°, plus `meta.json` | The browser fetches one small file per pick; JSON is readable |
+| 14 Nov 2026 | Show the nearest grid point's values, with no blending | Every number shown is one the model produced |
+| 14 Nov 2026 | Keep the true UTC block boundaries, so bars in India fall on half hours | Shifting to round local hours would invent values |
+| 14 Nov 2026 | Scheduled job four times a day, shortly after each run appears | Matches ECMWF's publishing times, checked live |
