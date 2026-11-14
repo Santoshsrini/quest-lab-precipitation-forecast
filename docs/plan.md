@@ -2,7 +2,7 @@
 
 QUEST Lab (IISc) Full Stack AI Pre-doctoral selection task · Santosh Srinivas · started 14 Nov 2026
 
-**Status:** planning only. No code is written until this document is agreed.
+**Status:** plan agreed on 14 Nov 2026. Building follows the "Order of work" list at the end of section 6.
 
 ## Context
 
@@ -43,9 +43,9 @@ The selection task (Project 1): fetch precipitation forecasts from ECMWF Open Da
 2. **Time window: the next 24 hours from now**, not the calendar day, so the panel is never nearly empty late in the day.
 3. **Coverage: anywhere in the world.** The back end must handle the full global grid.
 
-### Open point
+### The innovative element
 
-- **The innovative element.** The brief asks for an "innovative front end and user experience" and Phase 1 is deliberately plain. Santosh will decide what to add once Phase 1 works. Risk: the deadline is 15 Nov, so there may be little or no time for it after Phase 1.
+The brief asks for an "innovative front end and user experience". Rain colouring on the map, listed above under Phase 2, is brought into this submission as build phase 4 in section 6. It is dropped if it is not working by the cut-off time.
 
 ## 2. User Flow / App Flow
 
@@ -167,7 +167,7 @@ The look takes inspiration from windy.com. It is not a copy: we borrow the gener
 - **Rain wording:** each bar shows its amount, such as "4.2 mm". Above the chart, one plain sentence sums up the next 24 hours, for example "Rain likely this evening, 12 mm in total" or "No rain expected in the next 24 hours".
 - **Search bar:** shows the name of the selected place.
 - **Styles:** Varsha has its own small set of styles (colours, font, rounded search bar, panel), written from what the reference screenshots show. Windy's stylesheet is not used.
-- **Rainfall colours on the map:** Phase 2, as section 1 says.
+- **Rainfall colours on the map:** added in build phase 4 (section 6), with a small legend.
 
 ### Text and credits
 
@@ -278,7 +278,140 @@ The 3-hour blocks sit on UTC boundaries: 00:00, 03:00, 06:00 UTC and so on. In I
 
 ## 6. Implementation
 
-*To be filled.*
+The work is done in build phases. These are not the same as "Phase 1" and "Phase 2" in section 1, which describe the product. Build phases 1 to 3b together deliver the product's Phase 1. Build phases 4 and 5 are the product's Phase 2: rain colouring on the map is planned for this submission, and the multi-day forecast stays optional.
+
+### Folder structure
+
+```
+docs/plan.md                    this document
+site/index.html                 the page
+site/style.css                  Varsha's styles
+site/app.js                     map, search, summary box, panel
+site/data/                      meta.json and the 648 tiles (made by the script, not committed)
+pipeline/fetch_forecast.py      the data script
+pipeline/requirements.txt       exact Python package versions
+.github/workflows/update.yml    the scheduled job: run the script, publish the site
+README.md                       what the app is, how it works, how to run it
+.gitignore                      keeps site/data/, downloads and screenshots out of Git
+```
+
+### Build phase 1: data fetching and processing
+
+This comes first because it is the part most likely to go wrong (installing `eccodes`, reading the file format, running on GitHub's machines) and it is the core of the brief.
+
+Build:
+- A separate Python environment and `requirements.txt` with exact versions.
+- `fetch_forecast.py`, following the method in section 5: find the newest run, download `tp`, work out rain per block, write the tiles and `meta.json` into `site/data/`.
+
+Done when, checked on the laptop:
+- The script runs from start to finish and writes 648 tile files and `meta.json`.
+- The grid has 721 by 1440 points and no rain value is negative.
+- The 8 blocks printed for Bengaluru, and for a place where it is raining that day, agree with the ECMWF forecast on a public weather site.
+
+### Build phase 2: map and search
+
+Build:
+- The page with the dark map filling the screen, opening centred on India. Zoom in, zoom out and drag.
+- Clicking the map places the white dot and shows the place name, or the coordinates if no name is found, in the search bar.
+- The search bar suggests places while typing. Choosing one moves the map there, places the white dot and shows the name in the search bar.
+- Credits in a corner of the map.
+
+Done when, checked in a browser on the laptop:
+- Zoom and drag work, and labels change from countries to cities when zooming in.
+- A click on Bengaluru shows "Bengaluru" in the search bar. A click in the middle of an ocean shows coordinates.
+- Typing "Chennai" lists suggestions, and choosing one moves the map there.
+- The page is usable at phone width.
+
+Also in this phase: confirm the dark map style and the Photon usage rules (the checks listed in section 3).
+
+### Going live (straight after build phase 2)
+
+Build:
+- Create the public GitHub repository and push. Claude asks Santosh before creating it and before the first push.
+- `update.yml`: on a schedule four times a day, on every push and on demand, run the data script and publish `site/` to GitHub Pages.
+
+Done when:
+- The live URL shows the map and search on a laptop and on a phone.
+- The job, started by hand, finishes and the live site holds `meta.json` for the newest run.
+
+Going live before build phase 3a means any hosting problem shows up while there is still time to fix it.
+
+### Build phase 3a: forecast on screen
+
+The smallest step that makes the app work end to end. After this phase the app could be submitted.
+
+Build:
+- The summary box attached to the white dot: place name, rain in the next 3 hours, 24-hour total, down arrow, cross.
+- The bottom panel with the bar chart of 8 blocks, the forecast source line, and its cross.
+- The arrow swaps the box for the panel. Both crosses clear the selection. A new pick updates the open panel.
+
+Done when, checked in a browser:
+- Picking a place by click or by search shows the summary box, and the arrow opens the panel with 8 bars.
+- The numbers on screen match the values the script printed for the same place in build phase 1.
+- Times are in the selected place's local time: a place in India and a place in another time zone both read correctly.
+
+### Build phase 3b: the rest of the panel
+
+Build:
+- "About this location": coordinates, time zone, sunrise, sunset, dusk.
+- The one-sentence summary above the chart, and the rules for its wording (the open point from section 4).
+- Loading indicator and the "Try again" message.
+- Layout at phone width.
+
+Done when, checked in a browser:
+- Sunrise and sunset for Bengaluru agree with a public source to within a few minutes.
+- The summary sentence reads correctly for a dry place and for a rainy place.
+- With the data file made unreachable, the "Try again" message appears.
+- The panel is usable at phone width, scrolling sideways to reach "About this location".
+
+### Build phase 4: rain on the map
+
+This is the app's standout visual element, answering the brief's request for an innovative front end. It is planned, not optional, but it is dropped if it is not working by the cut-off time below. It is cheap because the data script already holds the whole globe's rain.
+
+Build:
+- The data script also saves one picture of the globe per 3-hour block: transparent where there is no rain, coloured by amount where there is. The script redraws the rows of the grid to match the map's projection, so the rain lines up with the coastlines.
+- The map lays the picture for the current block over itself, under the labels where the map style allows.
+- A small legend showing which colour means how many mm.
+
+Done when, checked in a browser:
+- Coloured rain areas appear on the map and line up with the coastlines when compared with a known feature.
+- Clicking inside a coloured area shows rain in the summary box for the current block, and clicking in a clear area shows none.
+- The legend matches the colours on the map.
+
+How long this takes is not known until build phase 1 shows how the data behaves.
+
+### Build phase 5: more days (optional)
+
+- A forecast beyond 24 hours, with sideways scrolling and day dividers in the panel.
+- Stepping the map's rain picture forward through the blocks.
+
+### Cut-off time
+
+Santosh wants to finish by the evening of 15 Nov. **No new features after 3 PM IST on 15 Nov.** From then on, only testing on the live URL, the README, and the demo. Whatever is not working by then is left out. Santosh can move this time.
+
+### Before submission
+
+- Run through the whole user flow on the live URL, on a laptop and on a phone.
+- Prepare the demo. Its form is not decided yet; Santosh chooses once the app is live.
+- Final commit and push.
+
+### How we work
+
+- **Stop after each build phase.** Claude shows the phase working, Santosh tries it himself, and Claude commits only when Santosh says so.
+- **Commits:** one per build phase, with messages in the style already used (`feat: ...`, `docs: ...`).
+- **Nothing is pushed or published without Santosh's say-so** the first time. After that, pushes to the same repository follow each approved commit.
+
+### Order of work
+
+1. Save this section into `docs/plan.md` and commit. Add `.gitignore`.
+2. Build phase 1 (data script), then Santosh's review, then commit.
+3. Build phase 2 (map and search), then review, then commit.
+4. Going live.
+5. Build phase 3a (forecast on screen), then review, then commit. The app is now submittable.
+6. Build phase 3b (the rest of the panel), then review, then commit.
+7. Build phase 4 (rain on the map), then review, then commit. Dropped if not working by the cut-off.
+8. **Cut-off: 3 PM IST, 15 Nov.** `README.md`, then "Before submission".
+9. Build phase 5 (more days), only if everything above is done before the cut-off.
 
 ## Decision Log
 
@@ -317,3 +450,9 @@ The 3-hour blocks sit on UTC boundaries: 00:00, 03:00, 06:00 UTC and so on. In I
 | 14 Nov 2026 | Show the nearest grid point's values, with no blending | Every number shown is one the model produced |
 | 14 Nov 2026 | Keep the true UTC block boundaries, so bars in India fall on half hours | Shifting to round local hours would invent values |
 | 14 Nov 2026 | Scheduled job four times a day, shortly after each run appears | Matches ECMWF's publishing times, checked live |
+| 14 Nov 2026 | Build order: data script; map and search; forecast in the front end; rain on the map | Santosh's phases, reordered on Claude's suggestion so the riskiest part and the core of the brief come first |
+| 14 Nov 2026 | Go live once, straight after build phase 2, with the page and the scheduled data job together | Hosting problems show up before build phase 3a, not near the deadline |
+| 14 Nov 2026 | Stop after each build phase for Santosh's review; commit only on his say-so | Santosh stays in control and can explain each part |
+| 14 Nov 2026 | Build phase 3 split into 3a (forecast on screen) and 3b (the rest of the panel) | A submittable app exists as early as possible |
+| 14 Nov 2026 | Rain on the map is planned build phase 4 and is the innovative element; more days is optional build phase 5 | The brief asks for an innovative front end; the data script already holds the global rain |
+| 14 Nov 2026 | No new features after 3 PM IST on 15 Nov | Santosh wants to finish by the evening; leaves time for testing, README and demo |

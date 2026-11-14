@@ -1,0 +1,14 @@
+# Forecast data made by the script (rebuilt on every run)
+site/data/
+pipeline/downloads/
+
+# Reference screenshots of another site
+docs/screenshots/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store
