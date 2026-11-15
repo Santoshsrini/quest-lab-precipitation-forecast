@@ -23,6 +23,7 @@ import eccodes
 import numpy as np
 import xarray as xr
 from ecmwf.opendata import Client
+from PIL import Image
 
 # ---------------------------------------------------------------- settings
 
@@ -44,6 +45,22 @@ TILE_ROWS = 18
 TILE_COLS = 36
 
 MAX_PLAUSIBLE_MM = 1000         # more rain than this in 3 hours means bad data
+
+# Colours for the rain pictures that are laid over the map. Each entry is
+# (rain in mm at which the colour starts, the colour). Below the first
+# entry the picture is transparent, so the plain map shows.
+RAIN_COLOURS = [
+    (1,   "#8cc4ff"),           # light blue: light rain
+    (2.5, "#3a7be0"),           # blue
+    (5,   "#3fb563"),           # green: moderate
+    (10,  "#f2dc3d"),           # yellow: heavy
+    (20,  "#f5962a"),           # orange: very heavy
+    (50,  "#e03a3a"),           # red: extreme
+]
+# Colours start at 1 mm. Starting lower painted about 40% of the globe
+# light blue and hid the land; at 1 mm about 8% is coloured.
+PICTURE_SIZE = 1440             # pictures are 1440 x 1440 pixels
+MAP_EDGE_LAT = 85.0511          # the web map's projection stops at this latitude
 
 
 # ------------------------------------------- step 1: find the newest run
@@ -231,13 +248,64 @@ def write_files(rain, precisions, run):
                  "rows": GRID_ROWS, "cols": GRID_COLS},
         "tile_degrees": 10,
         "tile_points": TILE_POINTS,
+        # The rain pictures: where they are, the area each one covers, and
+        # the colours, so the page's legend uses the same table as this script.
+        "pictures": {
+            "folder": "rain",
+            "north": MAP_EDGE_LAT, "south": -MAP_EDGE_LAT,
+            "west": -180 - SPACING / 2, "east": 180 - SPACING / 2,
+            "colours": [{"from_mm": mm, "colour": colour} for mm, colour in RAIN_COLOURS],
+        },
     }
+    write_pictures(rain, new / "rain")
     with open(new / "meta.json", "w") as f:
         json.dump(meta, f, indent=2)
 
     if DATA.exists():
         shutil.rmtree(DATA)
     new.rename(DATA)
+
+
+# ------------------------------------------- rain pictures for the map
+
+def picture_rows():
+    """For each row of a picture, which grid row does it show?
+
+    The grid's rows are evenly spaced in latitude. The web map is not: it
+    uses the Web Mercator projection, which stretches the far north and
+    south. So each picture row is given the latitude it has on the map,
+    and takes the nearest grid row. This makes the rain line up with the
+    coastlines.
+    """
+    # Position of each picture row's centre, from 0 at the top to 1 at the bottom.
+    fraction = (np.arange(PICTURE_SIZE) + 0.5) / PICTURE_SIZE
+    # The Web Mercator formula, turned round to give latitude.
+    top = math.asinh(math.tan(math.radians(MAP_EDGE_LAT)))
+    lat = np.degrees(np.arctan(np.sinh(top * (1 - 2 * fraction))))
+    return np.floor((90 - lat) / SPACING + 0.5).astype(int)
+
+
+def colour_class(tenths):
+    """Which colour does each rain value get? 0 = none, 1 = the first colour..."""
+    starts = [round(mm * 10) for mm, _ in RAIN_COLOURS]     # in tenths of a mm
+    return np.digitize(tenths, starts).astype(np.uint8)
+
+
+def write_pictures(rain, folder):
+    """Save one picture of the globe per block: b00.png, b01.png, ..."""
+    folder.mkdir(parents=True)
+    rows = picture_rows()
+
+    # The picture stores a colour number per pixel, plus this list of colours.
+    palette = [0, 0, 0]                                     # colour 0: transparent
+    for _, colour in RAIN_COLOURS:
+        palette += [int(colour[i:i + 2], 16) for i in (1, 3, 5)]
+
+    for block in range(rain.shape[0]):
+        classes = colour_class(rain[block])[rows, :]        # 1440 x 1440
+        picture = Image.fromarray(classes, mode="P")
+        picture.putpalette(palette)
+        picture.save(folder / f"b{block:02d}.png", transparency=0, optimize=True)
 
 
 # ------------------------------------------------------------ a quick look
@@ -276,6 +344,9 @@ def main():
     files = list((DATA / "tiles").glob("*.json"))
     out_mb = sum(p.stat().st_size for p in files) / 1e6
     print(f"Saved {len(files)} tiles ({out_mb:.0f} MB) and meta.json in {DATA}")
+    pictures = list((DATA / "rain").glob("*.png"))
+    picture_kb = sum(p.stat().st_size for p in pictures) / 1e3 / len(pictures)
+    print(f"Saved {len(pictures)} rain pictures, about {picture_kb:.0f} KB each")
 
     print_forecast("Bengaluru", 12.97, 77.59, run)
     print(f"\nDone in {time.time() - started:.0f} seconds.")

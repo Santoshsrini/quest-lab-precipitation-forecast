@@ -116,5 +116,48 @@ for _ in range(2000):
         wrong += 1
 check("lookup matches the grid: 2000 random points", wrong == 0, f"{wrong} wrong")
 
+# ---- the rain pictures laid over the map
+from PIL import Image
+
+pictures = sorted((ff.DATA / meta["pictures"]["folder"]).glob("b*.png"))
+check("32 rain pictures", len(pictures) == 32, f"found {len(pictures)}")
+images = [np.array(Image.open(p)) for p in pictures]       # colour numbers, 0 = transparent
+check("every picture is 1440 x 1440",
+      all(image.shape == (ff.PICTURE_SIZE, ff.PICTURE_SIZE) for image in images))
+
+
+def pixel_for(lat, lon):
+    """Which pixel shows this place? Worked out from the map's projection,
+    separately from the script's own picture_rows()."""
+    import math
+    top = math.asinh(math.tan(math.radians(ff.MAP_EDGE_LAT)))
+    y = (1 - math.asinh(math.tan(math.radians(lat))) / top) / 2
+    x = (lon - meta["pictures"]["west"]) / 360
+    return int(y * ff.PICTURE_SIZE), int(x * ff.PICTURE_SIZE)
+
+
+# At grid points, the pixel's colour must be the colour of the stored rain value.
+wrong = 0
+tested = 0
+for _ in range(5000):
+    block = int(rng.integers(0, 32))
+    row = int(rng.integers(24, 697))                        # 84N to 84S: inside the map
+    col = int(rng.integers(0, 1440))
+    pixel_row, pixel_col = pixel_for(float(grid_lat[row]), float(grid_lon[col]))
+    expected = int(ff.colour_class(rain[block, row, col]))
+    tested += 1
+    if int(images[block][pixel_row, pixel_col]) != expected:
+        wrong += 1
+check("picture colours match the stored rain: 5000 random grid points", wrong == 0,
+      f"{wrong} wrong of {tested}")
+
+wet_pixel = pixel_for(float(grid_lat[wet_row]), float(grid_lon[wet_col]))
+check("the wettest point of the run has the colour for its amount",
+      int(images[wet_block][wet_pixel]) == int(ff.colour_class(rain[wet_block, wet_row, wet_col])),
+      f"{rain[wet_block, wet_row, wet_col] / 10:.1f} mm, colour number {int(images[wet_block][wet_pixel])}")
+dry = np.argwhere(rain[0, 24:697, :] == 0)[0]
+dry_pixel = pixel_for(float(grid_lat[dry[0] + 24]), float(grid_lon[dry[1]]))
+check("a dry point is transparent", int(images[0][dry_pixel]) == 0)
+
 print(f"\n{'ALL CHECKS PASSED' if failures == 0 else f'{failures} CHECK(S) FAILED'}")
 sys.exit(1 if failures else 0)

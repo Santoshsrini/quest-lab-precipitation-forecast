@@ -490,3 +490,5 @@ Also still open from earlier:
 | 15 Nov 2026 | Times and "today" use the laptop's time zone for now; `tz-lookup` is not used | Quicker for the deadline, and what windy.com does. To be changed to the selected place's local time later (section 7) |
 | 15 Nov 2026 | Panel shows days, times and rain only: no day totals and no summary sentence | Santosh's specification |
 | 15 Nov 2026 | Build the panel first, go live, then extend the data script to make all four days complete | Santosh's choice |
+| 15 Nov 2026 | Map coloured by the rain in the current 3-hour block, from one picture per block written by the data script, with a legend | Santosh's idea; the standout visual element planned as build phase 4 |
+| 15 Nov 2026 | Map colours start at 1 mm, in six bands (1, 2.5, 5, 10, 20, 50 mm), 60% solid, smoothed | Starting at 0.1 mm coloured 39% of the globe and hid the land; 1 mm colours about 8.5% |

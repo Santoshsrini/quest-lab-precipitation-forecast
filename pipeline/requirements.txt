@@ -4,3 +4,4 @@ xarray==2025.6.1
 cfgrib==0.9.15.1
 eccodes==2.50.1
 numpy==2.2.6
+Pillow==12.3.0

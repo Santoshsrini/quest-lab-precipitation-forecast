@@ -80,6 +80,7 @@ async function startMap() {
   map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
 
   map.on("click", onMapClick);
+  map.on("load", startRain);      // colour the map once it has been drawn
 }
 
 startMap();
@@ -562,3 +563,71 @@ function gapLabel(text, count, side) {
 }
 
 document.getElementById("panel-close").addEventListener("click", clearSelection);
+
+// ========================================================= rain on the map
+//
+// The data script also saves one picture of the globe per 3-hour block
+// (data/rain/b00.png, b01.png, ...), coloured by the amount of rain. The
+// picture for the block that contains the present moment is laid over the
+// map. It is only a picture: clicks still go to the map, and the numbers
+// in the summary box and the panel still come from the tiles.
+
+const legend = document.getElementById("legend");
+const legendWhen = document.getElementById("legend-when");
+let shownBlock = null;          // the block whose picture is on the map
+
+async function startRain() {
+  try {
+    if (!meta) meta = await fetchJson("data/meta.json");
+  } catch (error) {
+    return;                     // no forecast files: the plain map still works
+  }
+  if (!meta.pictures) return;
+  buildLegend();
+  showRainForNow();
+  setInterval(showRainForNow, 60 * 1000);     // move on when the next block begins
+}
+
+function showRainForNow() {
+  const k = currentBlock();
+  if (k === shownBlock) return;
+  shownBlock = k;
+
+  if (k < 0 || k >= meta.blocks) {            // the present moment is outside the forecast
+    if (map.getLayer("rain")) map.setLayoutProperty("rain", "visibility", "none");
+    legendWhen.textContent = "No forecast for the present time";
+    return;
+  }
+
+  const p = meta.pictures;
+  // "?made=" makes the browser fetch the new picture when the data is remade.
+  const url = `data/${p.folder}/b${String(k).padStart(2, "0")}.png?made=${meta.made}`;
+  const corners = [[p.west, p.north], [p.east, p.north], [p.east, p.south], [p.west, p.south]];
+
+  if (map.getSource("rain")) {
+    map.getSource("rain").updateImage({ url, coordinates: corners });
+    map.setLayoutProperty("rain", "visibility", "visible");
+  } else {
+    map.addSource("rain", { type: "image", url, coordinates: corners });
+    // Put the colours beneath the borders and the place names.
+    const above = map.getStyle().layers.find((l) => l.type === "symbol" || l.id.includes("boundary"));
+    map.addLayer({
+      id: "rain", type: "raster", source: "rain",
+      paint: { "raster-opacity": 0.6, "raster-fade-duration": 0 },
+    }, above ? above.id : undefined);
+  }
+  legendWhen.textContent = `Rain, ${formatTime(blockStart(k))} to ${formatTime(blockStart(k + 1))}`;
+}
+
+// The colour key, built from the same table the data script used.
+function buildLegend() {
+  const bar = document.getElementById("legend-bar");
+  bar.replaceChildren(...meta.pictures.colours.map((c) => {
+    const step = el("div", "legend-step");
+    const swatch = el("div", "legend-swatch");
+    swatch.style.background = c.colour;
+    step.append(swatch, el("div", "legend-number", String(c.from_mm)));
+    return step;
+  }));
+  legend.hidden = false;
+}
