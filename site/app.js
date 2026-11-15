@@ -108,12 +108,15 @@ function select(lat, lon, name) {
   input.value = name;
   clearButton.hidden = false;
   hideSuggestions();
+  showForecast();
 }
 
-// Remove the white dot and empty the search bar. The map stays where it is.
+// Remove the white dot, the summary box and the panel, and empty the search
+// bar. The map stays where it is.
 function clearSelection() {
   selected = null;
   pickNumber += 1;
+  closeForecast();
   if (dot) dot.remove();
   dot = null;
   input.value = "";
@@ -142,6 +145,7 @@ async function onMapClick(event) {
   if (name && thisPick === pickNumber) {
     selected.name = name;
     input.value = name;
+    showNames();
   }
 }
 
@@ -293,3 +297,268 @@ clearButton.addEventListener("click", () => {
   clearSelection();
   input.focus();
 });
+
+// ============================================================ the forecast
+//
+// The data script (pipeline/fetch_forecast.py) saves the forecast as:
+//   data/meta.json             when the forecast starts, how many blocks
+//   data/tiles/r07_c25.json    the rain values, one file per 10 x 10 degrees
+// See docs/backend-data-processing.md for the layout.
+
+const HOUR_MS = 3600 * 1000;
+const DAYS_SHOWN = 4;         // today and the next 3 days
+const MIN_SCALE_MM = 5;       // a full-height bar is at least this much rain
+
+let meta = null;              // the contents of meta.json, once loaded
+const tileCache = new Map();  // tiles already downloaded, by file name
+
+async function fetchJson(url) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`${url}: ${response.status}`);
+  return response.json();
+}
+
+// Which tile holds the grid point nearest to this place, and where in the
+// tile's "rain" list is it? Same arithmetic as find_point() in the data script.
+function findPoint(lat, lon) {
+  const g = meta.grid;
+  const per = meta.tile_points;                                   // 40
+  let gridRow = Math.floor((g.north - lat) / g.spacing + 0.5);    // 0 to 720
+  let gridCol = Math.floor((lon - g.west) / g.spacing + 0.5);     // 0 to 1440
+  if (gridCol === g.cols) gridCol = 0;                            // the 180 line
+  const lastTileRow = Math.floor((g.rows - 1) / per) - 1;         // 17
+  const tileRow = Math.min(Math.floor(gridRow / per), lastTileRow);
+  const tileCol = Math.floor(gridCol / per);
+  const position = (gridRow - tileRow * per) * per + (gridCol - tileCol * per);
+  const two = (n) => String(n).padStart(2, "0");
+  return { file: `r${two(tileRow)}_c${two(tileCol)}.json`, position };
+}
+
+// Rain for one place: a list of numbers in mm, one per 3-hour block.
+async function loadRain(lat, lon) {
+  if (!meta) meta = await fetchJson("data/meta.json");
+  const { file, position } = findPoint(lat, lon);
+  if (!tileCache.has(file)) tileCache.set(file, await fetchJson(`data/tiles/${file}`));
+  return tileCache.get(file).rain[position].map((tenths) => tenths / 10);
+}
+
+// Block number k starts this many hours after the forecast's start.
+// k can be negative or past the end: those blocks have no data.
+function blockStart(k) {
+  return new Date(Date.parse(meta.first_block_start) + k * meta.block_hours * HOUR_MS);
+}
+
+function blockValue(rain, k) {
+  return k >= 0 && k < rain.length ? rain[k] : null;      // null = no data
+}
+
+// The block that contains the present moment.
+function currentBlock() {
+  return Math.floor((Date.now() - Date.parse(meta.first_block_start)) / (meta.block_hours * HOUR_MS));
+}
+
+// Split the forecast into days, in the laptop's own time zone.
+// A block belongs to the day in which it ends, so the block that contains
+// 12 AM is the first block of the new day.
+function groupIntoDays(rain) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const days = [];
+  for (let d = 0; d < DAYS_SHOWN; d++) {
+    const date = new Date(today);
+    date.setDate(today.getDate() + d);
+    days.push({ date, blocks: [] });
+  }
+  const now = currentBlock();
+  for (let k = -40; k < rain.length + 40; k++) {
+    const justBeforeEnd = new Date(blockStart(k + 1).getTime() - 60 * 1000);
+    justBeforeEnd.setHours(0, 0, 0, 0);
+    const day = days.find((d) => d.date.getTime() === justBeforeEnd.getTime());
+    if (day) {
+      day.blocks.push({ start: blockStart(k), mm: blockValue(rain, k),
+                        isNow: k === now, missing: k < 0 ? "before" : "after" });
+    }
+  }
+  return days;
+}
+
+const timeFormat = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" });
+const dayFormat = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "short" });
+const formatTime = (date) => timeFormat.format(date).replace(":00", "");     // "5:30 PM", "6 PM"
+const formatMm = (mm) => (mm === 0 ? "0" : mm.toFixed(1));
+
+// ---------------------------------------------- summary box and panel
+
+const panel = document.getElementById("panel");
+const panelTitle = document.getElementById("panel-title");
+const panelNote = document.getElementById("panel-note");
+const panelBody = document.getElementById("panel-body");
+
+let box = null;               // the summary box attached to the white dot
+let panelOpen = false;        // true once the down arrow has been pressed
+
+// Called whenever a place is picked. Shows the summary box, or, if the panel
+// is already open, refreshes the panel for the new place.
+async function showForecast() {
+  const thisPick = pickNumber;
+  const { lat, lon } = selected;
+
+  if (panelOpen) {
+    if (box) box.remove();
+    box = null;
+    fillPanel(null, "Loading forecast…");
+  } else {
+    fillBox(null, "Loading forecast…");
+  }
+
+  let rain = null;
+  let problem = "";
+  try {
+    rain = await loadRain(lat, lon);
+  } catch (error) {
+    problem = "Could not load the forecast.";
+  }
+  if (thisPick !== pickNumber) return;        // another place was picked meanwhile
+
+  if (panelOpen) fillPanel(rain, problem);
+  else fillBox(rain, problem);
+}
+
+function closeForecast() {
+  if (box) box.remove();
+  box = null;
+  panelOpen = false;
+  panel.hidden = true;
+  document.body.classList.remove("panel-open");
+}
+
+// The place name changed (the name for a clicked point arrives a moment later).
+function showNames() {
+  if (!selected) return;
+  const title = document.querySelector(".box-title");
+  if (title) title.textContent = selected.name.split(",")[0];
+  panelTitle.textContent = selected.name;
+}
+
+// A small helper to build elements: el("div", "class", "text")
+function el(tag, className, text) {
+  const element = document.createElement(tag);
+  if (className) element.className = className;
+  if (text !== undefined) element.textContent = text;
+  return element;
+}
+
+function tryAgainButton() {
+  const button = el("button", "try-again", "Try again");
+  button.type = "button";
+  button.addEventListener("click", showForecast);
+  return button;
+}
+
+// ---- the summary box
+
+function fillBox(rain, message) {
+  const content = el("div", "box");
+
+  const head = el("div", "box-head");
+  head.append(el("div", "box-title", selected.name.split(",")[0]));
+  const close = el("button", "box-close", "×");
+  close.type = "button";
+  close.setAttribute("aria-label", "Close");
+  close.addEventListener("click", clearSelection);
+  head.append(close);
+  content.append(head);
+
+  if (!rain) {
+    content.append(el("div", "box-message", message));
+    if (message.startsWith("Could not")) content.append(tryAgainButton());
+  } else {
+    const k = currentBlock();
+    const mm = blockValue(rain, k);
+    if (mm === null) {
+      content.append(el("div", "box-message", "No forecast for the present time."));
+    } else {
+      content.append(el("div", "box-amount", `${formatMm(mm)} mm`));
+      content.append(el("div", "box-when",
+        `Rain, ${formatTime(blockStart(k))} to ${formatTime(blockStart(k + 1))}`));
+    }
+    const more = el("button", "box-more", "4-day forecast");
+    more.type = "button";
+    more.prepend(el("span", "arrow", "▾"));
+    more.addEventListener("click", () => {
+      box.remove();                             // the arrow swaps the box for the panel
+      box = null;
+      panelOpen = true;
+      fillPanel(rain, "");
+    });
+    content.append(more);
+  }
+
+  if (box) box.remove();
+  box = new maplibregl.Popup({ closeButton: false, closeOnClick: false, focusAfterOpen: false,
+                               anchor: "bottom", offset: 20, maxWidth: "260px" })
+    .setLngLat([selected.lon, selected.lat])
+    .setDOMContent(content)
+    .addTo(map);
+}
+
+// ---- the bottom panel
+
+function fillPanel(rain, message) {
+  panel.hidden = false;
+  document.body.classList.add("panel-open");
+  panelTitle.textContent = selected.name;
+  panelBody.replaceChildren();
+
+  if (!rain) {
+    panelNote.textContent = "";
+    const note = el("div", "panel-message", message);
+    if (message.startsWith("Could not")) note.append(tryAgainButton());
+    panelBody.append(note);
+    return;
+  }
+
+  const issued = new Date(Date.parse(meta.run));
+  const issuedText = issued.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }) +
+    ", " + issued.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" }) + " UTC";
+  panelNote.textContent = `ECMWF forecast issued ${issuedText} · mm of rain per 3 hours · times in your local time`;
+
+  const days = groupIntoDays(rain);
+  const largest = Math.max(MIN_SCALE_MM, ...days.flatMap((d) => d.blocks.map((b) => b.mm || 0)));
+
+  days.forEach((day, index) => {
+    const section = el("div", "day");
+    section.append(el("div", "day-name", (index === 0 ? "Today · " : "") + dayFormat.format(day.date)));
+
+    const chart = el("div", "chart");
+    for (const block of day.blocks) {
+      const column = el("div", "column" + (block.isNow ? " now" : "") + (block.mm === null ? " empty" : ""));
+      column.append(el("div", "amount", block.mm === null ? "–" : formatMm(block.mm)));
+      const track = el("div", "track");
+      const bar = el("div", "bar");
+      if (block.mm) bar.style.height = `${Math.max(3, (block.mm / largest) * 100)}%`;
+      track.append(bar);
+      column.append(track);
+      column.append(el("div", "time", formatTime(block.start)));
+      chart.append(column);
+    }
+
+    // One label across the blocks that have no data.
+    const before = day.blocks.filter((b) => b.mm === null && b.missing === "before").length;
+    const after = day.blocks.filter((b) => b.mm === null && b.missing === "after").length;
+    if (before) chart.append(gapLabel("before forecast", before, "left"));
+    if (after) chart.append(gapLabel("not yet available", after, "right"));
+
+    section.append(chart);
+    panelBody.append(section);
+  });
+}
+
+function gapLabel(text, count, side) {
+  const label = el("div", "gap-label", text);
+  label.style.width = `calc(${count} * var(--column))`;
+  label.style[side] = "0";
+  return label;
+}
+
+document.getElementById("panel-close").addEventListener("click", clearSelection);

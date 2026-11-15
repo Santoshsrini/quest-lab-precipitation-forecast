@@ -425,6 +425,18 @@ Santosh wants to finish by the evening of 15 Nov. **No new features after 3 PM I
 8. **Cut-off: 3 PM IST, 15 Nov.** `README.md`, then "Before submission".
 9. Build phase 5 (more days), only if everything above is done before the cut-off.
 
+## 7. Items to Revisit Later
+
+Noted by Santosh on 15 Nov 2026 after reviewing the summary box and the 4-day panel. Not being worked on yet.
+
+1. **Use the selected place's local time for the forecast.** At present every time, and the meaning of "today", comes from the laptop's own time zone. That was chosen on 15 Nov as the quicker option for the deadline. The forecast should instead follow the local time of the selected location. This needs a way to find a place's time zone from its latitude and longitude, such as the `tz-lookup` library.
+2. **Polish and beautify the bottom panel** for the rain forecast. Like the summary box, it should be based on the selected place's local time.
+
+Also still open from earlier:
+
+- Sections 4 and 6 above still describe "About this location" and the old phase split. The note at the top of section 2 overrides them.
+- Filling the start of today from earlier forecast runs and extending the data to 120 hours, so that all four days are complete everywhere. Agreed to do after going live.
+
 ## Decision Log
 
 | Date | Decision | Reason |
@@ -475,3 +487,6 @@ Santosh wants to finish by the evening of 15 Nov. **No new features after 3 PM I
 | 15 Nov 2026 | The website is responsive | Santosh's change |
 | 15 Nov 2026 | Map drawn by MapLibre with OpenFreeMap's dark style, replacing Leaflet with CARTO images | CARTO's images need a key in a browser; OpenFreeMap needs none |
 | 15 Nov 2026 | The 3 PM cut-off was missed; submission moved to about 9 PM IST | Planning and data questions took longer than planned |
+| 15 Nov 2026 | Times and "today" use the laptop's time zone for now; `tz-lookup` is not used | Quicker for the deadline, and what windy.com does. To be changed to the selected place's local time later (section 7) |
+| 15 Nov 2026 | Panel shows days, times and rain only: no day totals and no summary sentence | Santosh's specification |
+| 15 Nov 2026 | Build the panel first, go live, then extend the data script to make all four days complete | Santosh's choice |

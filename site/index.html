@@ -32,6 +32,18 @@
   <!-- The app's name, top right -->
   <div id="brand">Varsha</div>
 
+  <!-- Bottom panel: the 4-day forecast for the selected place -->
+  <section id="panel" hidden>
+    <header id="panel-head">
+      <div>
+        <h2 id="panel-title"></h2>
+        <p id="panel-note"></p>
+      </div>
+      <button id="panel-close" type="button" aria-label="Close">&times;</button>
+    </header>
+    <div id="panel-body"></div>
+  </section>
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.min.js"></script>
   <script src="app.js"></script>
 </body>

@@ -164,6 +164,181 @@ html, body {
   pointer-events: none;        /* clicks pass through to the map */
 }
 
+/* ---------- summary box (attached to the white dot) ---------- */
+
+.maplibregl-popup-content {
+  padding: 0;
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  font-family: var(--font);
+  color: var(--ink);
+}
+.box { padding: 12px 14px 12px 16px; min-width: 190px; }
+.box-head { display: flex; align-items: flex-start; gap: 8px; }
+.box-title { flex: 1; font-size: 16px; font-weight: 700; line-height: 1.25; }
+.box-close {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  margin: -4px -6px 0 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+.box-close:hover { background: var(--hover); color: var(--ink); }
+.box-amount { margin-top: 6px; font-size: 28px; font-weight: 700; color: var(--rain); }
+.box-when { font-size: 13px; color: var(--muted); }
+.box-message { margin-top: 8px; font-size: 14px; color: var(--muted); }
+.box-more {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 8px 0;
+  border: none;
+  border-radius: 10px;
+  background: var(--hover);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.box-more:hover { background: var(--line); }
+.box-more .arrow { margin-right: 6px; }
+.try-again {
+  display: inline-block;
+  margin: 8px 0 0;
+  padding: 6px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.panel-message .try-again { margin-left: 12px; }
+
+/* ---------- bottom panel (4-day forecast) ---------- */
+
+:root {
+  --rain: #2f7fd6;             /* bars and amounts */
+  --column: 40px;              /* width of one 3-hour bar */
+  --panel-height: 262px;
+}
+
+#panel {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: calc(var(--panel-height) + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  z-index: 1100;
+  display: flex;
+  flex-direction: column;
+  background: #fbfcfd;
+  box-shadow: 0 -2px 14px rgba(0, 0, 0, 0.35);
+}
+#panel[hidden] { display: none; }
+
+#panel-head {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 12px 8px 20px;
+  border-bottom: 1px solid var(--line);
+}
+#panel-title { margin: 0; font-size: 18px; font-weight: 700; }
+#panel-note { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+#panel-close {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+}
+#panel-close:hover { background: var(--hover); color: var(--ink); }
+
+/* the days sit side by side and scroll sideways when they do not fit */
+#panel-body {
+  flex: 1;
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0 8px;
+}
+.panel-message { margin: auto; font-size: 15px; color: var(--muted); }
+
+.day {
+  flex: none;
+  padding: 10px 10px 8px;
+  border-right: 1px solid var(--line);       /* the divider between days */
+}
+.day:last-child { border-right: none; }
+.day-name { font-size: 14px; font-weight: 700; margin-bottom: 6px; white-space: nowrap; }
+
+.chart { position: relative; display: flex; }
+.column {
+  width: var(--column);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border-radius: 8px;
+  padding: 3px 0;
+}
+.column.now { background: #e8f1fb; }           /* the block that contains the present moment */
+.amount { height: 18px; font-size: 12px; font-weight: 600; color: var(--ink); }
+.track {
+  width: 22px;
+  height: 96px;
+  display: flex;
+  align-items: flex-end;                        /* bars grow up from the bottom */
+  border-bottom: 2px solid var(--line);
+}
+.bar { width: 100%; height: 0; background: var(--rain); border-radius: 4px 4px 0 0; }
+.time {
+  margin-top: 4px;
+  height: 28px;
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* blocks the forecast does not cover */
+.column.empty .amount { color: #b4bcc6; }
+.column.empty .track {
+  border: 1px dashed #c7ced6;
+  border-radius: 4px;
+}
+.gap-label {
+  position: absolute;
+  top: 54px;
+  font-size: 11px;
+  font-style: italic;
+  color: var(--muted);
+  text-align: center;
+  pointer-events: none;
+}
+
+/* while the panel is open, lift the map's corner controls above it */
+body.panel-open .maplibregl-ctrl-bottom-right,
+body.panel-open .maplibregl-ctrl-bottom-left {
+  bottom: calc(var(--panel-height) + env(safe-area-inset-bottom, 0px));
+}
+
 /* ---------- narrow screens (phones) ---------- */
 
 @media (max-width: 640px) {
@@ -189,4 +364,11 @@ html, body {
   .maplibregl-ctrl-group { display: none; }
 
   .maplibregl-ctrl-attrib { font-size: 10px; }
+
+  /* the name would sit under the panel */
+  body.panel-open #brand { display: none; }
+
+  #panel-head { padding-left: 14px; }
+  #panel-title { font-size: 16px; }
+  #panel-note { font-size: 11px; }
 }
