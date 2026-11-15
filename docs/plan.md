@@ -140,6 +140,7 @@ The app is a single screen. There are no separate pages.
 
 - Leaflet 1.9.4.
 - Every other package is fixed to an exact version when it is first installed and tested, and written into `requirements.txt` (Python) or into the page's CDN links (JavaScript). The versions are then listed here.
+- Python packages, installed and tested on 15 Nov 2026 with Python 3.10: `ecmwf-opendata` 0.3.35, `xarray` 2025.6.1, `cfgrib` 0.9.15.1, `eccodes` 2.50.1, `numpy` 2.2.6.
 - Node is not needed.
 
 **On the laptop**

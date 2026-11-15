@@ -38,10 +38,11 @@ Each claim this plan rests on, and how sure we are of it. "File header" means th
 | Columns run eastward from the 180° line, ending at 179.75°E | Checked | File header: first longitude 180 (the same line as −180), last 179.75 |
 | `tp` at a step is the total since the run's start | Checked | File header: accumulation from hour 0, over 3 hours for step 3, 6 hours for step 6, 96 hours for step 96 |
 | The step-0 file contains a `tp` field | Checked | The step-0 index file |
-| The step-0 `tp` field is zero everywhere | Assumed | A total over zero hours must be zero. Confirmed on the first download. |
-| `tp` is in metres | Assumed, with good grounds | The header uses ECMWF's own code for total precipitation (category 1, number 193), which ECMWF defines in metres. The header does not state units. Confirmed on the first download by the size of the values: 4 mm of rain appears as about 0.004. |
-| The `ecmwf-opendata` package can download `tp` alone, without the rest of the file | Assumed | The package's documented behaviour. Confirmed on the first download by the size of what arrives. |
-| How many days a run stays on the server | Not known | Checked when building |
+| The step-0 `tp` field is zero everywhere | Checked | Downloaded data, 15 Nov 2026. The script stops if this is ever not so. |
+| `tp` is in metres | Checked | The file reader reports the unit as "m". The global average of each 3-hour block is about 0.3 mm, which matches the Earth's known average rainfall of roughly 2.5 to 3 mm a day. A unit ten times off would give an impossible average. |
+| The `ecmwf-opendata` package can download `tp` alone, without the rest of the file | Checked | Each step arrives as 235 to 400 KB; 33 steps total 11.8 MB |
+| The file stores values with limited precision, which gets coarser at later steps | Found on the first download | See "Precision of the data" |
+| How many days a run stays on the server | Not known | Not needed by the script, which always takes the newest run |
 
 ## Counting
 
@@ -86,7 +87,7 @@ Ask the server for the most recent run that has `tp` available for every step we
 
 ### Step 2. Download `tp` for steps 0 to 96
 
-33 steps, one every 3 hours: step 0, then steps 3 to 96. About 10 MB in total.
+33 steps, one every 3 hours: step 0, then steps 3 to 96. About 12 MB in total.
 
 *Why 96 hours:* the page can then show up to 4 days. A run is 7 to 14 hours old while in use, so 96 hours of data gives at least 3 full days ahead of the present moment, and leaves a margin if an update is missed.
 
@@ -107,8 +108,31 @@ One rule for every block:
 Then:
 
 - Multiply by 1000 to go from metres to mm.
-- Set tiny negative results to zero. They can arise from how the file stores numbers.
+- Set to zero any amount smaller than the file's precision for that block (see "Precision of the data"). This also removes the tiny negative results.
 - Round to 0.1 mm.
+
+### Precision of the data
+
+Found on the first download, 15 Nov 2026. The plan before that did not know of it.
+
+The file stores each value in fixed steps, using 12 bits per value. Because `tp` is a running total that keeps growing, the steps get coarser the further into the forecast one goes:
+
+| Step | Smallest difference the file can hold |
+|---|---|
+| 3 hours | 0.06 mm |
+| 6 hours | 0.12 mm |
+| 93 and 96 hours | 0.49 mm |
+
+These figures are for the 15 Nov 00 UTC run. They change from run to run, because they depend on the largest total anywhere on the globe.
+
+Two effects:
+
+- **False tiny amounts.** Where the precision changes between two steps, subtracting them gives small false results. Between steps 3 and 6, 2.5% of grid points showed the total falling by 0.06 mm, and about 100,000 showed a rise of exactly 0.06 mm.
+- **Light rain is invisible at long range.** In the block from 93 to 96 hours, every point is either 0 or at least 0.49 mm.
+
+**The rule (agreed with Santosh on 15 Nov):** a block's precision is the coarser of the precisions of its two steps. Any amount smaller than that cannot be told apart from no rain and is stored as zero. Each block's precision is recorded in `meta.json` as `precision_mm`, so the page can state it.
+
+Values are still stored to 0.1 mm, but beyond the first day they are not accurate to 0.1 mm. Moderate and heavy rain are unaffected.
 
 ### Step 5. Cut the grid into tiles
 
@@ -142,12 +166,17 @@ All times are in UTC.
 ```
 {
   "model": "ECMWF IFS",
+  "source": "ECMWF Open Data, licensed CC BY 4.0",
   "run": "2026-11-15T00:00Z",
+  "made": "2026-11-15T10:52Z",
   "block_hours": 3,
   "blocks": 32,
   "first_block_start": "2026-11-15T00:00Z",
+  "rain_unit": "tenths of a mm",
+  "precision_mm": [0.061, 0.1221, ... 0.4883],        one number per block
   "grid": { "north": 90, "west": -180, "spacing": 0.25, "rows": 721, "cols": 1440 },
-  "tile_degrees": 10
+  "tile_degrees": 10,
+  "tile_points": 40
 }
 ```
 
@@ -156,6 +185,8 @@ All times are in UTC.
 The files go into `site/data/` beside the web page, and the scheduled job publishes the whole `site/` folder.
 
 ## How the page finds a point's forecast
+
+"Rounded to the nearest whole number" below means: add 0.5, then round down. The script and the page both do it this way, so that a value exactly half way between two grid points goes the same way in both.
 
 1. **Grid row** = (90 − latitude) ÷ 0.25, rounded to the nearest whole number. Result: 0 to 720.
 2. **Grid column** = (longitude + 180) ÷ 0.25, rounded to the nearest whole number. If the result is 1440, use 0, because that is the same line. Result: 0 to 1439.
@@ -230,6 +261,58 @@ GitHub Actions runs the script at about 01:00, 08:00, 13:00 and 20:00 UTC, short
 - For a few points, the value the page reads equals the value the script printed for the same grid point.
 - The lookup gives a valid tile and position at 90°N, at 90°S, at 180°W, just west of 180°E, and at an ordinary point.
 
+## Results of the first full run (15 Nov 2026)
+
+The script is `pipeline/fetch_forecast.py` and the checks are `pipeline/check_output.py`. Both were run on the laptop against the 15 Nov 00 UTC run.
+
+**The run**
+
+- Time taken: 52 seconds.
+- Download: 33 steps, 11.8 MB.
+- Output: 648 tiles of 106 to 137 KB each, 69 MB in all, plus `meta.json`.
+- Largest value: 307.6 mm in one 3-hour block.
+
+**The checks: all 24 passed**
+
+- Tile files: 648 in all, 612 with 40 rows and 36 with 41 rows; the 41-row tiles are exactly tile row 17; points add up to 1,038,240; every point has 32 blocks.
+- Values: none negative; the tiles hold the same total rain as the full grid.
+- Lookup: for 13 named places and 2,000 random points, the value read from the tiles equals the value at the nearest grid point, found by a separate method that searches the file's own latitude and longitude lists. The named places include both poles, both sides of the 180° line and the four far corners.
+
+**Comparison with an independent source**
+
+Open-Meteo republishes the same ECMWF IFS 0.25° data. For each place, its hourly values were added up into our 3-hour blocks.
+
+| Place | Blocks compared | Blocks within 0.3 mm | Largest difference | 4-day total, ours and theirs |
+|---|---|---|---|---|
+| Bengaluru | 32 | 32 | 0.0 mm | 0.0 and 0.0 mm |
+| Chennai | 32 | 32 | 0.1 mm | 25.3 and 25.5 mm |
+| Colombo | 32 | 31 | 0.3 mm | 6.9 and 7.5 mm |
+| Trincomalee | 32 | 32 | 0.1 mm | 11.7 and 11.7 mm |
+| Singapore | 32 | 32 | 0.1 mm | 69.7 and 69.6 mm |
+| London | 32 | 32 | 0.1 mm | 10.0 and 10.5 mm |
+| Sydney | 32 | 31 | 0.3 mm | 6.9 and 7.2 mm |
+
+Our totals are slightly lower where rain is very light, because amounts below the file's precision are stored as zero.
+
+### Open point: one value that disagrees with Windy
+
+At 9.00°N, 83.75°E, in a storm east of Sri Lanka, our data gives 195.2 mm for 00 to 03 UTC on 15 Nov. Santosh read about 19 mm for that spot on windy.com.
+
+What is established:
+
+- The raw file, read a second way with no code of ours, holds 0.195190 m at that point for hours 0 to 3.
+- Open-Meteo gives 195.3 mm for the same point and hours, and agrees with us to 0.1 mm on the next three blocks.
+- Santosh ran separate code of his own in Colab and also got 195 mm at this point.
+- So the script reproduces what the ECMWF 00 UTC open data contains. The difference from Windy is not in our fetching or conversion.
+
+What is not established: why Windy differs. Possible reasons, none confirmed:
+
+- **A different time window.** The run before (14 Nov 18 UTC) gives 58.6 mm at this point for 21 to 00 UTC, which is 19.5 mm an hour.
+- **A different run.** That earlier run gives 83.6 mm for 00 to 03 UTC, less than half of the newer run's figure.
+- **A different grid.** Windy uses ECMWF's native 9 km grid, a licensed product; the open data is the same forecast re-sampled to 25 km. Neighbouring points 25 km apart range from 11 to 195 mm in this block. On its own this is a weak explanation, because re-sampling to a coarser grid normally lowers peaks, not raises them.
+
+A single grid point in a storm core is erratic. Only 9 points on the globe exceed 100 mm in this block. Santosh is inspecting the Windy value by hand.
+
 ## Questions raised and settled
 
 | Date | Question | Outcome |
@@ -241,3 +324,5 @@ GitHub Actions runs the script at about 01:00, 08:00, 13:00 and 20:00 UTC, short
 | 15 Nov 2026 | Does showing local time change the back end? | No. The back end stores UTC; the page converts. |
 | 15 Nov 2026 | How is the grid point found inside a tile? | Position = row inside the tile × 40 + column inside the tile. |
 | 15 Nov 2026 | Counting from 0 or 1? | From 0, everywhere. |
+| 15 Nov 2026 | How to treat amounts smaller than the file's precision? | Store them as zero, and record each block's precision in `meta.json`. |
+| 15 Nov 2026 | Is 195 mm at 9°N, 83.75°E a processing error? | No. Two readings of the raw file and an independent service give the same value. Why Windy shows about 19 mm is not established. |

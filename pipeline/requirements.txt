@@ -1,0 +1,6 @@
+# Exact versions installed and tested on 15 Nov 2026 (Python 3.10)
+ecmwf-opendata==0.3.35
+xarray==2025.6.1
+cfgrib==0.9.15.1
+eccodes==2.50.1
+numpy==2.2.6
