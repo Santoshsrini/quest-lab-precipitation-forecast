@@ -194,7 +194,7 @@ The files go into `site/data/` beside the web page, and the scheduled job publis
 4. **Row inside the tile** = grid row − tile row × 40. **Column inside the tile** = grid column − tile column × 40.
 5. Download that tile.
 6. **Position in the `rain` list** = row inside the tile × 40 + column inside the tile. The entry there is the point's 32 block values. The multiplier is the tile's number of columns, which is always 40, including in the 41-row tiles.
-7. Using the run's start time from `meta.json`, find the block containing the present moment, and show it with the blocks after it.
+7. Using the run's start time from `meta.json`, work out each block's time in the place's local time. The panel shows 4 days, today and the next 3, each beginning with the block that contains 12 AM. Blocks of those days that fall outside the run's 96 hours are shown as empty bars.
 
 The value shown is the forecast for the grid point nearest to the picked spot. There is no blending between neighbouring points.
 

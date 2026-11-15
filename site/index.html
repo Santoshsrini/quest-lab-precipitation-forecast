@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Varsha · Rain forecast</title>
+  <meta name="description" content="Rain forecast for any place on Earth, from ECMWF Open Data.">
+
+  <!-- MapLibre: the map library -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- The map fills the whole screen -->
+  <div id="map"></div>
+
+  <!-- Search bar, top left -->
+  <div id="search">
+    <div id="search-bar">
+      <svg id="search-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="11" cy="11" r="7"></circle>
+        <line x1="16.5" y1="16.5" x2="21" y2="21"></line>
+      </svg>
+      <input id="search-input" type="text" placeholder="Search for a place"
+             autocomplete="off" spellcheck="false" aria-label="Search for a place">
+      <button id="search-clear" type="button" aria-label="Clear" hidden>&times;</button>
+    </div>
+    <ul id="suggestions" hidden></ul>
+  </div>
+
+  <!-- The app's name, top right -->
+  <div id="brand">Varsha</div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

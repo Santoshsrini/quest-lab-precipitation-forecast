@@ -22,14 +22,17 @@ The selection task (Project 1): fetch precipitation forecasts from ECMWF Open Da
 - **Pick by clicking:** clicking a point on the map selects that location.
 - **Pick by searching:** a search bar lets the user find and select a location by name.
 - **Bottom panel:** once a location is selected, a panel at the bottom shows:
-  - the precipitation forecast for that location for the next 24 hours, in 3-hour blocks (8 blocks, for example "3 PM to 6 PM: 4.2 mm"), in the selected place's local time
-  - details of the location, for example:
-    `N12°43'40", E77°46'15" · Asia/Kolkata (+05:30) · Sunrise 6:16 AM · Sunset 5:50 PM · Dusk 6:12 PM`
+  - the precipitation forecast for that location for 4 days: today and the 3 days after it, each in 3-hour blocks, in the selected place's local time. If today is Sunday, the panel shows Sunday, Monday, Tuesday and Wednesday.
+  - each day begins with the 3-hour block that contains 12 AM. The blocks do not line up with midnight: in India they run 11:30 PM to 2:30 AM, 2:30 to 5:30 AM and so on.
+  - blocks of today that fall before the forecast's start are drawn as empty bars marked "before forecast", because a forecast has no values before it starts. Blocks at the end of the fourth day that lie beyond the 96 hours of data are drawn the same way, marked "not yet available".
+
+(Changed by Santosh on 15 Nov 2026. Before that, the panel showed the next 24 hours from the present moment, plus details of the location such as coordinates and sunrise. Both were removed.)
 
 ### Phase 2 (later)
 
-- Forecast for the next 5 days or a week.
 - Colouring or markings on the map that show where a lot of rain is expected.
+
+(The multi-day forecast was listed here until 15 Nov 2026, when Santosh moved it into Phase 1 as a 4-day forecast.)
 
 ### Not in scope
 
@@ -40,14 +43,21 @@ The selection task (Project 1): fetch precipitation forecasts from ECMWF Open Da
 ### Settled points
 
 1. **Time step: 3-hour blocks.** The original request was hourly, but ECMWF Open Data gives precipitation every 3 hours for IFS and every 6 hours for AIFS (to be confirmed against the ECMWF documentation). We show what the data contains and do not invent hourly detail. This means Phase 1 uses IFS.
-2. **Time window: the next 24 hours from now**, not the calendar day, so the panel is never nearly empty late in the day.
-3. **Coverage: anywhere in the world.** The back end must handle the full global grid.
+2. **Coverage: anywhere in the world.** The back end must handle the full global grid.
 
 ### The innovative element
 
 The brief asks for an "innovative front end and user experience". Rain colouring on the map, listed above under Phase 2, is brought into this submission as build phase 4 in section 6. It is dropped if it is not working by the cut-off time.
 
 ## 2. User Flow / App Flow
+
+**Changed by Santosh on 15 Nov 2026.** These points replace anything below that says otherwise:
+
+- **Summary box:** the place name, the rain in the next 3 hours, a down arrow and a small cross. No 24-hour total. "The next 3 hours" is the 3-hour block that contains the present moment, shown with its real times.
+- **Bottom panel:** the 4-day forecast only, scrolling sideways with a divider between days. "About this location" is removed.
+- **Crosses:** the summary box's cross and the panel's cross each remove the white dot and the box or panel, and empty the search bar. The map stays exactly where it is, at the same position and zoom. It does not go back to the opening view.
+- **Screen sizes:** the website is responsive. The layout adapts to phone, tablet and laptop widths.
+- **Search bar cross:** a small cross inside the search bar clears the selection in the same way.
 
 The app is a single screen. There are no separate pages.
 
@@ -110,11 +120,10 @@ The app is a single screen. There are no separate pages.
 | Need | Choice | Why |
 |---|---|---|
 | Page | Plain HTML, CSS and JavaScript. No React, no build tools. | Santosh knows it and can explain every line. Nothing to install or compile. |
-| Map | Leaflet 1.9.4, loaded from a CDN, with a free dark grey map style (see section 4; exact style confirmed when building starts) | The simplest map library. Zoom, drag and click work out of the box. Free, no key. |
+| Map | MapLibre GL JS 4.7.1, loaded from a CDN, drawing OpenFreeMap's dark style, recoloured to mid grey | Free, with no key and no usage limits. Zoom, drag and click work out of the box. Changed on 15 Nov 2026 from Leaflet with CARTO's dark map images, which turned out to need a key when loaded in a browser. |
 | Bar chart | Drawn with plain HTML and CSS | Eight bars do not need a chart library. |
 | Place search and place names | Photon (photon.komoot.io) | Free, no key, and built for suggestions while typing. Also turns a clicked point into a place name. |
 | Time zone of the picked point | `tz-lookup`, a small JavaScript library | Works in the browser from latitude and longitude. No service to call. |
-| Sunrise, sunset, dusk | SunCalc, a small JavaScript library | Calculated in the browser. No service to call. |
 
 **Back end (data script)**
 
@@ -138,7 +147,7 @@ The app is a single screen. There are no separate pages.
 
 **Versions**
 
-- Leaflet 1.9.4.
+- MapLibre GL JS 4.7.1.
 - Every other package is fixed to an exact version when it is first installed and tested, and written into `requirements.txt` (Python) or into the page's CDN links (JavaScript). The versions are then listed here.
 - Python packages, installed and tested on 15 Nov 2026 with Python 3.10: `ecmwf-opendata` 0.3.35, `xarray` 2025.6.1, `cfgrib` 0.9.15.1, `eccodes` 2.50.1, `numpy` 2.2.6.
 - Node is not needed.
@@ -459,3 +468,10 @@ Santosh wants to finish by the evening of 15 Nov. **No new features after 3 PM I
 | 14 Nov 2026 | Build phase 3 split into 3a (forecast on screen) and 3b (the rest of the panel) | A submittable app exists as early as possible |
 | 14 Nov 2026 | Rain on the map is planned build phase 4 and is the innovative element; more days is optional build phase 5 | The brief asks for an innovative front end; the data script already holds the global rain |
 | 14 Nov 2026 | No new features after 3 PM IST on 15 Nov | Santosh wants to finish by the evening; leaves time for testing, README and demo |
+| 15 Nov 2026 | Panel shows 4 days (today and the next 3) from local midnight, replacing "the next 24 hours from now"; multi-day forecast moves into Phase 1 | Santosh's change |
+| 15 Nov 2026 | Blocks before the forecast's start, and beyond its end, are empty bars with a label | A forecast has no values outside its own 96 hours; no change to the data script |
+| 15 Nov 2026 | Summary box drops the 24-hour total; "About this location" is removed; SunCalc is dropped | Santosh's change: keep it simple |
+| 15 Nov 2026 | Crosses clear the selection without moving the map | Santosh's change |
+| 15 Nov 2026 | The website is responsive | Santosh's change |
+| 15 Nov 2026 | Map drawn by MapLibre with OpenFreeMap's dark style, replacing Leaflet with CARTO images | CARTO's images need a key in a browser; OpenFreeMap needs none |
+| 15 Nov 2026 | The 3 PM cut-off was missed; submission moved to about 9 PM IST | Planning and data questions took longer than planned |

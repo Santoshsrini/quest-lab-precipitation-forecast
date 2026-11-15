@@ -1,0 +1,192 @@
+/* Varsha styles */
+
+:root {
+  --gap: 16px;                 /* space between things and the screen edge */
+  --ink: #1f2933;              /* dark text */
+  --muted: #6b7785;            /* secondary text */
+  --card: #ffffff;             /* search bar and lists */
+  --line: #e6e9ed;
+  --hover: #f1f4f7;
+  --shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  font-family: var(--font);
+  color: var(--ink);
+  background: #3a3d40;
+}
+
+/* ---------- map ---------- */
+
+#map {
+  position: fixed;
+  inset: 0;
+  background: #3a3d40;
+}
+
+.maplibregl-map { font-family: var(--font); }
+.maplibregl-canvas { cursor: crosshair; }          /* shows that the map can be clicked */
+
+/* the white dot that marks the selected place */
+.dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 7px rgba(255, 255, 255, 0.3), 0 1px 6px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+
+/* zoom buttons, bottom right */
+.maplibregl-ctrl-group {
+  background: rgba(40, 43, 46, 0.9) !important;
+  border-radius: 12px !important;
+  box-shadow: var(--shadow) !important;
+  overflow: hidden;
+}
+.maplibregl-ctrl-group button {
+  width: 40px !important;
+  height: 40px !important;
+}
+.maplibregl-ctrl-group button + button { border-top: 1px solid rgba(255, 255, 255, 0.12) !important; }
+.maplibregl-ctrl-group button .maplibregl-ctrl-icon { filter: invert(1); }
+.maplibregl-ctrl-bottom-right .maplibregl-ctrl-group { margin: 0 var(--gap) 10px 0; }
+
+/* credits, bottom right */
+.maplibregl-ctrl-attrib {
+  background: rgba(30, 32, 34, 0.6) !important;
+  color: #c9ced4;
+  font-size: 11px;
+}
+.maplibregl-ctrl-attrib a { color: #e6e9ed !important; }
+
+/* ---------- search ---------- */
+
+#search {
+  position: fixed;
+  top: calc(var(--gap) + env(safe-area-inset-top, 0px));
+  left: calc(var(--gap) + env(safe-area-inset-left, 0px));
+  width: 380px;
+  max-width: calc(100vw - 2 * var(--gap));
+  z-index: 1000;               /* above the map */
+}
+
+#search-bar {
+  display: flex;
+  align-items: center;
+  height: 48px;
+  padding: 0 8px 0 16px;
+  background: var(--card);
+  border-radius: 24px;
+  box-shadow: var(--shadow);
+}
+
+#search-icon {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+#search-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  margin: 0 8px;
+  border: none;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  font-size: 17px;             /* 16px or more stops phones zooming in on focus */
+  color: var(--ink);
+}
+#search-input::placeholder { color: #9aa5b1; }
+
+#search-clear {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+}
+#search-clear:hover { background: var(--hover); color: var(--ink); }
+
+#suggestions {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 6px 0;
+  background: var(--card);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  max-height: 60vh;
+  overflow-y: auto;
+}
+#suggestions li {
+  padding: 10px 18px;
+  cursor: pointer;
+  line-height: 1.3;
+}
+#suggestions li.active,
+#suggestions li:hover { background: var(--hover); }
+#suggestions .place { font-size: 16px; font-weight: 600; }
+#suggestions .region { font-size: 13px; color: var(--muted); }
+#suggestions li.note { cursor: default; color: var(--muted); font-size: 14px; }
+#suggestions li.note:hover { background: transparent; }
+
+/* ---------- name ---------- */
+
+#brand {
+  position: fixed;
+  top: calc(var(--gap) + env(safe-area-inset-top, 0px));
+  right: calc(var(--gap) + env(safe-area-inset-right, 0px));
+  height: 48px;
+  display: flex;
+  align-items: center;
+  z-index: 1000;
+  color: #fff;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
+  pointer-events: none;        /* clicks pass through to the map */
+}
+
+/* ---------- narrow screens (phones) ---------- */
+
+@media (max-width: 640px) {
+  :root { --gap: 12px; }
+
+  /* the search bar spans the screen */
+  #search {
+    width: auto;
+    right: calc(var(--gap) + env(safe-area-inset-right, 0px));
+  }
+
+  /* the name moves to the bottom left, clear of the search bar */
+  #brand {
+    top: auto;
+    right: auto;
+    left: calc(var(--gap) + env(safe-area-inset-left, 0px));
+    bottom: calc(52px + env(safe-area-inset-bottom, 0px));   /* above the credits */
+    height: auto;
+    font-size: 18px;
+  }
+
+  /* fingers zoom by pinching, so the buttons are not needed */
+  .maplibregl-ctrl-group { display: none; }
+
+  .maplibregl-ctrl-attrib { font-size: 10px; }
+}
