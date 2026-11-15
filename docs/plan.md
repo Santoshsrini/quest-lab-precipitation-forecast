@@ -213,6 +213,8 @@ Labels changing with zoom (continents and oceans, then countries, then cities an
 
 ## 5. Back End: Data Fetching and Processing
 
+**Updated on 15 Nov 2026:** the detailed and current back end plan is in `backend-data-processing.md`. It stores 96 hours (32 blocks) where this section says 72 hours (24 blocks), and it corrects the tile layout and the point lookup. Where the two differ, that document is the one to follow.
+
 ### Outline
 
 A timed script fetches the ECMWF Open Data forecast, processes it to extract the values the front end needs, and stores the result where the front end loads it from.
