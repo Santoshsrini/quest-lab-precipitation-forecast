@@ -210,15 +210,30 @@ async function search(text) {
   }
   if (thisSearch !== searchNumber) return;      // the user has typed more since
 
-  suggestions = found.map((feature) => ({
-    ...describe(feature.properties),
-    type: feature.properties.type,
-    lat: feature.geometry.coordinates[1],
-    lon: feature.geometry.coordinates[0],
-  }));
+  suggestions = found.map((feature) => {
+    const p = feature.properties;
+    const s = describe(p);
+    return {
+      ...s,
+      type: p.type,
+      lat: feature.geometry.coordinates[1],
+      lon: feature.geometry.coordinates[0],
+      // The district or county, if it says more than the place's own name.
+      area: [p.district, p.county].find((a) => a && a !== s.place && !s.region.includes(a)) || "",
+    };
+  });
   if (suggestions.length === 0) {
     showNote("No place found with that name.");
     return;
+  }
+
+  // Places that would look identical in the list (same name and region),
+  // such as the two Yong'an in Fujian, get their district or county and
+  // their coordinates on an extra line, so the user can tell them apart.
+  const looks = (s) => `${s.place}|${s.region}`;
+  for (const s of suggestions) {
+    const same = suggestions.filter((t) => looks(t) === looks(s)).length > 1;
+    s.detail = same ? [s.area, formatCoordinates(s.lat, s.lon)].filter(Boolean).join(" · ") : "";
   }
 
   list.replaceChildren(...suggestions.map((s, index) => {
@@ -230,6 +245,12 @@ async function search(text) {
     region.className = "region";
     region.textContent = s.region;
     item.append(place, region);
+    if (s.detail) {
+      const detail = document.createElement("div");
+      detail.className = "detail";
+      detail.textContent = s.detail;
+      item.append(detail);
+    }
     // mousedown, not click: it fires before the input loses focus
     item.addEventListener("mousedown", (event) => {
       event.preventDefault();
@@ -431,6 +452,30 @@ const formatMm = (mm) => (mm === 0 ? "0" : mm.toFixed(1));
 const panel = document.getElementById("panel");
 const panelTitle = document.getElementById("panel-title");
 const panelNote = document.getElementById("panel-note");
+const panelPlace = document.getElementById("panel-place");
+
+// Where the selected place is, and which grid point its forecast comes
+// from. Two places can share a name (there are two Yong'an in Fujian), so
+// this tells the user exactly which one they picked.
+//   "Picked 25.94°N, 117.36°E · forecast for grid point 26.00°N, 117.25°E, 13 km away"
+function placeDescription(lat, lon) {
+  const g = meta.grid;
+  let row = Math.floor((g.north - lat) / g.spacing + 0.5);         // same rounding as findPoint
+  let col = Math.floor((lon - g.west) / g.spacing + 0.5);
+  if (col === g.cols) col = 0;
+  const gridLat = g.north - row * g.spacing;
+  const gridLon = g.west + col * g.spacing;
+  return `Picked ${formatCoordinates(lat, lon)} · forecast for grid point ` +
+         `${formatCoordinates(gridLat, gridLon)}, ${Math.round(distanceKm(lat, lon, gridLat, gridLon))} km away`;
+}
+
+// Distance along the Earth's surface, in km.
+function distanceKm(lat1, lon1, lat2, lon2) {
+  const rad = Math.PI / 180;
+  const a = Math.sin((lat2 - lat1) * rad / 2) ** 2 +
+            Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin((lon2 - lon1) * rad / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.sqrt(a));
+}
 const panelBody = document.getElementById("panel-body");
 
 let box = null;               // the summary box attached to the white dot
@@ -548,6 +593,8 @@ function fillPanel(rain, message) {
   panel.hidden = false;
   document.body.classList.add("panel-open");
   panelTitle.textContent = selected.name;
+  panelPlace.textContent = meta ? placeDescription(selected.lat, selected.lon)
+                                : `Picked ${formatCoordinates(selected.lat, selected.lon)}`;
   panelBody.replaceChildren();
 
   if (!rain) {

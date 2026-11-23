@@ -431,6 +431,7 @@ Noted by Santosh on 15 Nov 2026 after reviewing the summary box and the 4-day pa
 
 1. **Done on 23 Nov 2026 (step 1).** ~~Use the selected place's local time for the forecast.~~ At the time, every time, and the meaning of "today", comes from the laptop's own time zone. That was chosen on 15 Nov as the quicker option for the deadline. The forecast should instead follow the local time of the selected location. This needs a way to find a place's time zone from its latitude and longitude, such as the `tz-lookup` library.
 2. **Polish and beautify the bottom panel** for the rain forecast. Like the summary box, it should be based on the selected place's local time.
+3. **Summary box and panel can disagree just after midnight** (noted 24 Nov 2026, left as it is for now). The summary box shows the block containing the present moment. A block belongs to the day it starts in, so between 12 AM and the first block of the new day (2:30 AM in India), the current block started yesterday and is not in the panel's "today". To be resolved.
 
 Also still open from earlier:
 
