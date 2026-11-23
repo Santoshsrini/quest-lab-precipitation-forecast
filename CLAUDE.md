@@ -32,5 +32,5 @@ cd site && python3 -m http.server 8000
 
 - Approving a plan is not permission to build. Wait for an explicit go-ahead.
 - Give a short to-do list before each phase; stop after it for his review.
-- Commit and push only when he says so. Record decisions in `docs/plan.md`.
+- Commit only when he says so. Push only when he explicitly says "push"; a commit request alone never includes a push. Record decisions in `docs/plan.md`.
 - Keep answers short and plain.
