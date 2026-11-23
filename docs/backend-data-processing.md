@@ -1,6 +1,6 @@
 # Varsha: Back End Data Processing Plan
 
-*Started 15 Nov 2026. This document goes deeper than section 5 of `plan.md`. Where the two differ, this one is newer.*
+*Started 15 Nov 2026; updated 23 Nov 2026 for 144 hours, the per-parameter layout and local time. This document goes deeper than section 5 of `plan.md`. Where the two differ, this one is newer. The "Results of the first full run" section records the 15 Nov run with 96 hours, and is kept as it was.*
 
 ## Purpose
 
@@ -8,7 +8,7 @@ This document describes how Varsha gets rainfall forecasts from ECMWF and turns 
 
 ## In short
 
-- **In:** the newest ECMWF IFS forecast, total precipitation only, for the whole globe, for the next 96 hours (4 days).
+- **In:** the newest ECMWF IFS forecast, total precipitation only, for the whole globe, for 144 hours (6 days) from the run's start.
 - **Out:** 648 small JSON files (one per 10° by 10° area of the globe) and one information file, saved beside the web page.
 - **How often:** four times a day, after each new ECMWF forecast is published.
 
@@ -56,8 +56,8 @@ Everything is counted from 0, in both the script and the page.
 | Tile column | 0 (westernmost) | 35 (easternmost) | 36 |
 | Row inside a tile | 0 | 39 (40 in the southernmost tiles) | 40 or 41 |
 | Column inside a tile | 0 | 39 | 40 |
-| Position in a tile's `rain` list | 0 | 1599 (1639 in the southernmost tiles) | 1,600 or 1,640 |
-| Block | 0 (the first 3 hours of the run) | 31 | 32 |
+| Position in a tile's `values` list | 0 | 1599 (1639 in the southernmost tiles) | 1,600 or 1,640 |
+| Block | 0 (the first 3 hours of the run) | 47 | 48 |
 
 Reason: Python and JavaScript both count list entries from 0, and the formulas then need no adding or subtracting of 1. For example, the latitude of a grid row is 90 − row × 0.25, so row 0 is exactly 90°N.
 
@@ -85,11 +85,11 @@ Ask the server for the most recent run that has `tp` available for every step we
 
 *Why:* a run is published step by step, so the very newest may be incomplete.
 
-### Step 2. Download `tp` for steps 0 to 96
+### Step 2. Download `tp` for steps 0 to 144
 
-33 steps, one every 3 hours: step 0, then steps 3 to 96. About 12 MB in total.
+49 steps, one every 3 hours: step 0, then steps 3 to 144. About 24 MB in total.
 
-*Why 96 hours:* the page can then show up to 4 days. A run is 7 to 14 hours old while in use, so 96 hours of data gives at least 3 full days ahead of the present moment, and leaves a margin if an update is missed.
+*Why 144 hours (changed from 96 on 23 Nov):* 144 is the last 3-hourly step of every ECMWF run (checked for all four runs of 22 Nov). The page shows the selected place's today plus 3 days, which ends at most 96 hours from the present moment. A run is usually up to about 13 hours old while in use, and older if a scheduled job fails. 144 hours covers all of that without a fine-tuned number. The script uses the newest run that already has step 144.
 
 ### Step 3. Read each step into a grid of numbers
 
@@ -103,7 +103,7 @@ One rule for every block:
 
 - Block 0 (hours 0 to 3) = tp(3) − tp(0). Since tp(0) is zero, this equals tp(3).
 - Block 1 (hours 3 to 6) = tp(6) − tp(3).
-- And so on, up to block 31 (hours 93 to 96) = tp(96) − tp(93).
+- And so on, up to block 47 (hours 141 to 144) = tp(144) − tp(141).
 
 Then:
 
@@ -130,7 +130,7 @@ Two effects:
 - **False tiny amounts.** Where the precision changes between two steps, subtracting them gives small false results. Between steps 3 and 6, 2.5% of grid points showed the total falling by 0.06 mm, and about 100,000 showed a rise of exactly 0.06 mm.
 - **Light rain is invisible at long range.** In the block from 93 to 96 hours, every point is either 0 or at least 0.49 mm.
 
-**The rule (agreed with Santosh on 15 Nov):** a block's precision is the coarser of the precisions of its two steps. Any amount smaller than that cannot be told apart from no rain and is stored as zero. Each block's precision is recorded in `meta.json` as `precision_mm`, so the page can state it.
+**The rule (agreed with Santosh on 15 Nov):** a block's precision is the coarser of the precisions of its two steps. Any amount smaller than that cannot be told apart from no rain and is stored as zero. Each block's precision is recorded in `meta.json`, in the rain parameter's `precision` list, so the page can state it.
 
 Values are still stored to 0.1 mm, but beyond the first day they are not accurate to 0.1 mm. Moderate and heavy rain are unaffected.
 
@@ -138,22 +138,22 @@ Values are still stored to 0.1 mm, but beyond the first day they are not accurat
 
 10° by 10° tiles: 36 across and 18 down, 648 in all. Tile row t holds grid rows t × 40 to t × 40 + 39, and tile row 17 also holds grid row 720. Tile column u holds grid columns u × 40 to u × 40 + 39.
 
-*Why tiles:* the page needs one point at a time. One tile is about 130 KB; the whole globe in one file would be about 85 MB.
+*Why tiles:* the page needs one point at a time. One tile is about 160 KB before compression (5 to 15 KB as sent); the whole globe in one file would be about 105 MB.
 
 ### Step 6. Save each tile as a JSON file
 
-- **File name:** `site/data/tiles/r07_c25.json` for tile row 7, tile column 25.
+- **File name:** `site/data/tp/tiles/r07_c25.json` for tile row 7, tile column 25. Each parameter has its own folder (`tp` is rain), so more parameters can be added without changing the layout.
 - **Values:** whole numbers of tenths of a mm, so 4.2 mm is stored as 42.
-- **Order of the `rain` list:** row by row. All of the tile's first row from west to east, then its second row, and so on. Each entry is one grid point's 32 block values, block 0 first.
+- **Order of the `values` list:** row by row. All of the tile's first row from west to east, then its second row, and so on. Each entry is one grid point's 48 block values, block 0 first.
 
 Sketch of one file:
 
 ```
 {
-  "rows": 40, "cols": 40, "blocks": 32,
-  "rain": [
-    [0, 0, 12, 42, 5, 0, ...],     32 numbers for position 0 (row 0, column 0 of the tile)
-    [0, 0, 10, 38, 7, 0, ...],     32 numbers for position 1 (row 0, column 1)
+  "rows": 40, "cols": 40, "blocks": 48,
+  "values": [
+    [0, 0, 12, 42, 5, 0, ...],     48 numbers for position 0 (row 0, column 0 of the tile)
+    [0, 0, 10, 38, 7, 0, ...],     48 numbers for position 1 (row 0, column 1)
     ...                            1600 positions in all (1640 where "rows" is 41)
   ]
 }
@@ -167,16 +167,23 @@ All times are in UTC.
 {
   "model": "ECMWF IFS",
   "source": "ECMWF Open Data, licensed CC BY 4.0",
-  "run": "2026-11-15T00:00Z",
-  "made": "2026-11-15T10:52Z",
+  "run": "2026-11-23T06:00Z",
+  "made": "2026-11-23T13:20Z",
   "block_hours": 3,
-  "blocks": 32,
-  "first_block_start": "2026-11-15T00:00Z",
-  "rain_unit": "tenths of a mm",
-  "precision_mm": [0.061, 0.1221, ... 0.4883],        one number per block
+  "blocks": 48,
+  "first_block_start": "2026-11-23T06:00Z",
   "grid": { "north": 90, "west": -180, "spacing": 0.25, "rows": 721, "cols": 1440 },
   "tile_degrees": 10,
-  "tile_points": 40
+  "tile_points": 40,
+  "pictures": { "north": 85.05, "south": -85.05, "west": -180.125, "east": 179.875 },
+  "parameters": [
+    {
+      "id": "tp", "name": "Rain", "unit": "mm", "per": "3 hours", "stored_as": "tenths",
+      "tiles": "tp/tiles", "pictures": "tp/pictures",
+      "precision": [0.0305, ... 0.2441],          one number per block
+      "colours": [{ "from": 1, "colour": "#8cc4ff" }, ...]
+    }
+  ]
 }
 ```
 
@@ -193,8 +200,8 @@ The files go into `site/data/` beside the web page, and the scheduled job publis
 3. **Tile row** = grid row ÷ 40, rounded down, but never more than 17. **Tile column** = grid column ÷ 40, rounded down.
 4. **Row inside the tile** = grid row − tile row × 40. **Column inside the tile** = grid column − tile column × 40.
 5. Download that tile.
-6. **Position in the `rain` list** = row inside the tile × 40 + column inside the tile. The entry there is the point's 32 block values. The multiplier is the tile's number of columns, which is always 40, including in the 41-row tiles.
-7. Using the run's start time from `meta.json`, work out each block's time in the place's local time. The panel shows 4 days, today and the next 3, each beginning with the block that contains 12 AM. Blocks of those days that fall outside the run's 96 hours are shown as empty bars.
+6. **Position in the `values` list** = row inside the tile × 40 + column inside the tile. The entry there is the point's 48 block values. The multiplier is the tile's number of columns, which is always 40, including in the 41-row tiles.
+7. Using the run's start time from `meta.json`, work out each block's start time in the place's local time. See "Local time" for which blocks are shown.
 
 The value shown is the forecast for the grid point nearest to the picked spot. There is no blending between neighbouring points.
 
@@ -215,7 +222,7 @@ The value shown is the forecast for the grid point nearest to the picked spot. T
 | Column inside the tile | 1030 − 25 × 40 | 30 |
 | Position in the list | 28 × 40 + 30 | 1150 |
 
-The page downloads `r07_c25.json`, which covers 20°N to 10.25°N and 70°E to 79.75°E, and reads entry 1150 of its `rain` list. The grid point used is 13.00°N, 77.50°E, about 10 km from the picked spot.
+The page downloads `r07_c25.json`, which covers 20°N to 10.25°N and 70°E to 79.75°E, and reads entry 1150 of its `values` list. The grid point used is 13.00°N, 77.50°E, about 10 km from the picked spot.
 
 ## Local time
 
@@ -226,10 +233,20 @@ The panel shows times in the selected place's local time. This changes nothing i
 
 The back end cannot do the conversion, because local time depends on which point is picked. Storing UTC once also lets one set of files serve every time zone.
 
-Two consequences for the page:
+**Which blocks the panel shows (from 23 Nov):**
 
-- Blocks sit on UTC boundaries (00:00, 03:00, 06:00 UTC and so on). In a zone with a half-hour offset, such as India, bars read "2:30 PM to 5:30 PM".
-- In those zones local midnight falls inside a block (in India, the block from 11:30 PM to 2:30 AM). The day divider in the panel goes before the first block that starts on the new local day.
+1. Use the latest forecast run.
+2. Find the selected place's time zone from its latitude and longitude (the `tz-lookup` library).
+3. The window is the place's local 12 AM today to 12 AM four days later: today plus 3 days.
+4. Show every block that starts inside the window. A block belongs to the day it starts in.
+5. Blocks before the run's start are not in the data. They are always in the past, because a run is published about 7 hours after it starts, so nothing in the future is missing. Today can therefore have fewer than 8 blocks.
+
+Consequences:
+
+- Blocks sit on UTC boundaries (00:00, 03:00, 06:00 UTC and so on). In a zone with a half-hour offset, such as India, bars read "2:30 PM to 5:30 PM", and each day runs from the 2:30 AM block to the 11:30 PM block. No block from the previous day appears.
+- The map's colour legend covers the whole globe, so its times stay in the viewer's own time zone.
+
+`check_output.py` confirms that, for every offset from UTC−12 to UTC+14, the window lies inside the stored data now and 13 hours from now.
 
 ## Schedule
 
@@ -323,6 +340,9 @@ A single grid point in a storm core is erratic. Only 9 points on the globe excee
 | 15 Nov 2026 | Do the 41-row tiles change the lookup? | Yes, for the South Pole row. The lookup now limits the tile row to 17. A second edge at the 180° line was fixed at the same time. |
 | 15 Nov 2026 | Does showing local time change the back end? | No. The back end stores UTC; the page converts. |
 | 15 Nov 2026 | How is the grid point found inside a tile? | Position = row inside the tile × 40 + column inside the tile. |
+| 23 Nov 2026 | Store 144 hours, not 96? | Yes. 144 is the last 3-hourly step of every run, and it covers today plus 3 days everywhere even if jobs fail. 48 blocks. |
+| 23 Nov 2026 | Times in the viewer's or the place's time zone? | The place's. The panel shows the place's today plus 3 days; a block belongs to the day it starts in. |
+| 23 Nov 2026 | Is the latest run used? | Yes. `check_output.py` asks ECMWF independently for its newest complete run and compares. |
 | 15 Nov 2026 | Counting from 0 or 1? | From 0, everywhere. |
 | 15 Nov 2026 | How to treat amounts smaller than the file's precision? | Store them as zero, and record each block's precision in `meta.json`. |
 | 15 Nov 2026 | Is 195 mm at 9°N, 83.75°E a processing error? | No. Two readings of the raw file and an independent service give the same value. Why Windy shows about 19 mm is not established. |

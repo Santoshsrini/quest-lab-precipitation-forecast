@@ -28,11 +28,11 @@ IFS forecast, 0.25°  ->  download total precipitation,   ->  meta.json         
                          cut the globe into tiles
 ```
 
-**1. Fetch.** The script finds the newest fully published run of the ECMWF IFS forecast and downloads one field, total precipitation (`tp`), for steps 0 to 96 hours. That is 33 small files, about 13 MB.
+**1. Fetch.** The script finds the newest fully published run of the ECMWF IFS forecast and downloads one field, total precipitation (`tp`), for steps 0 to 144 hours. That is 49 small files, about 24 MB.
 
 **2. Process.** `tp` is a running total since the start of the run, in metres. The rain in each 3-hour block is one step's total minus the previous step's, converted to mm.
 
-**3. Tile.** The grid has 721 by 1440 points (about 25 km apart). It is cut into 648 tiles of 10° by 10°, each saved as one JSON file holding 32 values for every grid point in it.
+**3. Tile.** The grid has 721 by 1440 points (about 25 km apart). It is cut into 648 tiles of 10° by 10°, each saved as one JSON file holding 48 values for every grid point in it.
 
 **3b. Draw.** The script also saves one small picture of the globe per 3-hour block, coloured by rain amount and transparent below 1 mm. Its rows are re-sampled to the web map's projection so the rain lines up with the coastlines. The page lays the picture for the current block over the map. The picture is for display only: clicks and forecast numbers still come from the tiles.
 
@@ -91,8 +91,8 @@ docs/                           planning documents
 
 - **3-hour blocks, not hourly.** ECMWF Open Data gives precipitation every 3 hours. The app shows those blocks as they are and does not invent hourly values.
 - **Blocks sit on UTC boundaries.** In India they run 11:30 PM to 2:30 AM, 2:30 to 5:30 AM and so on. Each day in the panel begins with the block that contains 12 AM.
-- **Empty bars at the start of today.** A forecast has no values before its own start. Depending on the hour, the first bars of today can be empty and marked "before forecast".
-- **Times are in the viewer's time zone,** not the selected place's. Showing the place's local time is planned.
+- **Today can have fewer than 8 bars.** The panel shows the selected place's today plus 3 days, in the place's own time zone, from the latest forecast run. A run has no values before its own start, so today begins at the first block the run covers. Those missing blocks are always in the past.
+- **The map legend's times are in the viewer's own time zone,** because the map covers the whole globe. The summary box and the panel use the selected place's time zone.
 - **Precision gets coarser further ahead.** The source files store totals with limited precision, about 0.06 mm early in the forecast and about 0.5 mm by day four. Amounts below the precision are shown as zero, so very light rain may not appear on later days.
 - **Map colours start at 1 mm.** Lighter rain is not coloured on the map, so that the land stays visible. The summary box and the panel still show it. Colours are smoothed between grid points, so at the edge of a coloured area the colour can differ slightly from the number in the summary box.
 - **About 25 km resolution.** The value is for the nearest grid point, which can be up to about 18 km from the picked spot. Single-point values in intense storms can be erratic.

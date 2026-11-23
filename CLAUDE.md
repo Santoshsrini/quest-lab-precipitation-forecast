@@ -7,7 +7,7 @@ Rain forecast web app for the QUEST Lab (IISc) selection task: ECMWF IFS Open Da
 
 ## Layout
 
-- `pipeline/fetch_forecast.py`: downloads `tp`, works out rain per 3-hour block, writes `site/data/` (tiles, `meta.json`, `rain/` pictures)
+- `pipeline/fetch_forecast.py`: downloads `tp`, works out rain per 3-hour block, writes `site/data/` (`meta.json`, and per parameter `tp/tiles/`, `tp/pictures/`), 144 h
 - `pipeline/check_output.py`: checks the output; must pass before publishing
 - `site/`: `index.html`, `style.css`, `app.js` (MapLibre + OpenFreeMap, Photon search)
 - `.github/workflows/update.yml`: runs the script 4×/day and on pushes to `site/` or `pipeline/`, deploys to Pages

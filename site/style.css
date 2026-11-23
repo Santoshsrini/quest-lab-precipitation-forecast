@@ -317,22 +317,6 @@ html, body {
   text-align: center;
 }
 
-/* blocks the forecast does not cover */
-.column.empty .amount { color: #b4bcc6; }
-.column.empty .track {
-  border: 1px dashed #c7ced6;
-  border-radius: 4px;
-}
-.gap-label {
-  position: absolute;
-  top: 54px;
-  font-size: 11px;
-  font-style: italic;
-  color: var(--muted);
-  text-align: center;
-  pointer-events: none;
-}
-
 /* while the panel is open, lift the map's corner controls above it */
 body.panel-open .maplibregl-ctrl-bottom-right,
 body.panel-open .maplibregl-ctrl-bottom-left {

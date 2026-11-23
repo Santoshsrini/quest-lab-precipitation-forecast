@@ -98,7 +98,7 @@ const clearButton = document.getElementById("search-clear");
 const list = document.getElementById("suggestions");
 
 function select(lat, lon, name) {
-  selected = { lat, lon, name };
+  selected = { lat, lon, name, zone: zoneAt(lat, lon) };
   pickNumber += 1;
 
   if (dot) dot.remove();
@@ -320,7 +320,7 @@ async function fetchJson(url) {
 }
 
 // Which tile holds the grid point nearest to this place, and where in the
-// tile's "rain" list is it? Same arithmetic as find_point() in the data script.
+// tile's "values" list is it? Same arithmetic as find_point() in the data script.
 function findPoint(lat, lon) {
   const g = meta.grid;
   const per = meta.tile_points;                                   // 40
@@ -335,12 +335,54 @@ function findPoint(lat, lon) {
   return { file: `r${two(tileRow)}_c${two(tileCol)}.json`, position };
 }
 
+// The rain entry in meta.json's list of parameters.
+const rainInfo = () => meta.parameters.find((p) => p.id === "tp");
+
 // Rain for one place: a list of numbers in mm, one per 3-hour block.
 async function loadRain(lat, lon) {
   if (!meta) meta = await fetchJson("data/meta.json");
   const { file, position } = findPoint(lat, lon);
-  if (!tileCache.has(file)) tileCache.set(file, await fetchJson(`data/tiles/${file}`));
-  return tileCache.get(file).rain[position].map((tenths) => tenths / 10);
+  const url = `data/${rainInfo().tiles}/${file}`;
+  if (!tileCache.has(url)) tileCache.set(url, await fetchJson(url));
+  return tileCache.get(url).values[position].map((tenths) => tenths / 10);
+}
+
+// ------------------------------------------------ local time of a place
+
+// The time zone at a latitude and longitude, such as "Asia/Kolkata".
+// If the tz-lookup library did not load, use the browser's own zone.
+function zoneAt(lat, lon) {
+  try {
+    return tzlookup(lat, lon);
+  } catch (error) {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone;
+  }
+}
+
+// The date at a moment in a zone, as "2026-11-23".
+function dayKey(date, zone) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric",
+                                            month: "2-digit", day: "2-digit" }).format(date);
+}
+
+// The day after a "2026-11-23" key, as a key.
+function nextDayKey(key) {
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
+}
+
+// "Monday 23 Nov", for a "2026-11-23" key.
+function dayName(key) {
+  const [y, m, d] = key.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "short",
+                                            timeZone: "UTC" }).format(new Date(Date.UTC(y, m - 1, d, 12)));
+}
+
+// "Asia/Kolkata (UTC+5:30)"
+function zoneLabel(zone) {
+  const offset = new Intl.DateTimeFormat("en-US", { timeZone: zone, timeZoneName: "shortOffset" })
+    .formatToParts(new Date()).find((p) => p.type === "timeZoneName").value;
+  return `${zone} (${offset.replace("GMT", "UTC").replace(/^UTC$/, "UTC+0")})`;
 }
 
 // Block number k starts this many hours after the forecast's start.
@@ -358,34 +400,30 @@ function currentBlock() {
   return Math.floor((Date.now() - Date.parse(meta.first_block_start)) / (meta.block_hours * HOUR_MS));
 }
 
-// Split the forecast into days, in the laptop's own time zone.
-// A block belongs to the day in which it ends, so the block that contains
-// 12 AM is the first block of the new day.
-function groupIntoDays(rain) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+// Split the forecast into the place's today and the next 3 days, in the
+// place's own time zone. A block belongs to the day in which it starts.
+// Only blocks from the latest forecast run are shown: blocks before the
+// run's start are not in the data, and are always in the past anyway.
+function groupIntoDays(rain, zone) {
   const days = [];
+  let key = dayKey(new Date(), zone);
   for (let d = 0; d < DAYS_SHOWN; d++) {
-    const date = new Date(today);
-    date.setDate(today.getDate() + d);
-    days.push({ date, blocks: [] });
+    days.push({ key, blocks: [] });
+    key = nextDayKey(key);
   }
   const now = currentBlock();
-  for (let k = -40; k < rain.length + 40; k++) {
-    const justBeforeEnd = new Date(blockStart(k + 1).getTime() - 60 * 1000);
-    justBeforeEnd.setHours(0, 0, 0, 0);
-    const day = days.find((d) => d.date.getTime() === justBeforeEnd.getTime());
-    if (day) {
-      day.blocks.push({ start: blockStart(k), mm: blockValue(rain, k),
-                        isNow: k === now, missing: k < 0 ? "before" : "after" });
-    }
+  for (let k = 0; k < rain.length; k++) {
+    const day = days.find((d) => d.key === dayKey(blockStart(k), zone));
+    if (day) day.blocks.push({ start: blockStart(k), mm: rain[k], isNow: k === now });
   }
   return days;
 }
 
-const timeFormat = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" });
-const dayFormat = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "short" });
-const formatTime = (date) => timeFormat.format(date).replace(":00", "");     // "5:30 PM", "6 PM"
+// "5:30 PM", "6 PM". With a zone, in that zone; without, in the viewer's own.
+function formatTime(date, zone) {
+  return new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: zone })
+    .format(date).replace(":00", "");
+}
 const formatMm = (mm) => (mm === 0 ? "0" : mm.toFixed(1));
 
 // ---------------------------------------------- summary box and panel
@@ -480,8 +518,9 @@ function fillBox(rain, message) {
       content.append(el("div", "box-message", "No forecast for the present time."));
     } else {
       content.append(el("div", "box-amount", `${formatMm(mm)} mm`));
+      const zone = selected.zone;
       content.append(el("div", "box-when",
-        `Rain, ${formatTime(blockStart(k))} to ${formatTime(blockStart(k + 1))}`));
+        `Rain, ${formatTime(blockStart(k), zone)} to ${formatTime(blockStart(k + 1), zone)}`));
     }
     const more = el("button", "box-more", "4-day forecast");
     more.type = "button";
@@ -522,44 +561,34 @@ function fillPanel(rain, message) {
   const issued = new Date(Date.parse(meta.run));
   const issuedText = issued.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }) +
     ", " + issued.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" }) + " UTC";
-  panelNote.textContent = `ECMWF forecast issued ${issuedText} · mm of rain per 3 hours · times in your local time`;
+  const zone = selected.zone;
+  panelNote.textContent = `ECMWF forecast issued ${issuedText} · mm of rain per 3 hours · ` +
+    `times in ${zoneLabel(zone)}`;
 
-  const days = groupIntoDays(rain);
-  const largest = Math.max(MIN_SCALE_MM, ...days.flatMap((d) => d.blocks.map((b) => b.mm || 0)));
+  const days = groupIntoDays(rain, zone);
+  const largest = Math.max(MIN_SCALE_MM, ...days.flatMap((d) => d.blocks.map((b) => b.mm)));
 
   days.forEach((day, index) => {
     const section = el("div", "day");
-    section.append(el("div", "day-name", (index === 0 ? "Today · " : "") + dayFormat.format(day.date)));
+    section.append(el("div", "day-name", (index === 0 ? "Today · " : "") + dayName(day.key)));
 
     const chart = el("div", "chart");
     for (const block of day.blocks) {
-      const column = el("div", "column" + (block.isNow ? " now" : "") + (block.mm === null ? " empty" : ""));
-      column.append(el("div", "amount", block.mm === null ? "–" : formatMm(block.mm)));
+      const column = el("div", "column" + (block.isNow ? " now" : ""));
+      column.append(el("div", "amount", formatMm(block.mm)));
       const track = el("div", "track");
       const bar = el("div", "bar");
       if (block.mm) bar.style.height = `${Math.max(3, (block.mm / largest) * 100)}%`;
       track.append(bar);
       column.append(track);
-      column.append(el("div", "time", formatTime(block.start)));
+      column.append(el("div", "time", formatTime(block.start, zone)));
       chart.append(column);
     }
-
-    // One label across the blocks that have no data.
-    const before = day.blocks.filter((b) => b.mm === null && b.missing === "before").length;
-    const after = day.blocks.filter((b) => b.mm === null && b.missing === "after").length;
-    if (before) chart.append(gapLabel("before forecast", before, "left"));
-    if (after) chart.append(gapLabel("not yet available", after, "right"));
+    if (day.blocks.length === 0) chart.append(el("div", "panel-message", "Not yet available"));
 
     section.append(chart);
     panelBody.append(section);
   });
-}
-
-function gapLabel(text, count, side) {
-  const label = el("div", "gap-label", text);
-  label.style.width = `calc(${count} * var(--column))`;
-  label.style[side] = "0";
-  return label;
 }
 
 document.getElementById("panel-close").addEventListener("click", clearSelection);
@@ -601,7 +630,7 @@ function showRainForNow() {
 
   const p = meta.pictures;
   // "?made=" makes the browser fetch the new picture when the data is remade.
-  const url = `data/${p.folder}/b${String(k).padStart(2, "0")}.png?made=${meta.made}`;
+  const url = `data/${rainInfo().pictures}/b${String(k).padStart(2, "0")}.png?made=${meta.made}`;
   const corners = [[p.west, p.north], [p.east, p.north], [p.east, p.south], [p.west, p.south]];
 
   if (map.getSource("rain")) {
@@ -616,17 +645,18 @@ function showRainForNow() {
       paint: { "raster-opacity": 0.6, "raster-fade-duration": 0 },
     }, above ? above.id : undefined);
   }
+  // The map covers the whole globe, so its times are in the viewer's own zone.
   legendWhen.textContent = `Rain, ${formatTime(blockStart(k))} to ${formatTime(blockStart(k + 1))}`;
 }
 
 // The colour key, built from the same table the data script used.
 function buildLegend() {
   const bar = document.getElementById("legend-bar");
-  bar.replaceChildren(...meta.pictures.colours.map((c) => {
+  bar.replaceChildren(...rainInfo().colours.map((c) => {
     const step = el("div", "legend-step");
     const swatch = el("div", "legend-swatch");
     swatch.style.background = c.colour;
-    step.append(swatch, el("div", "legend-number", String(c.from_mm)));
+    step.append(swatch, el("div", "legend-number", String(c.from)));
     return step;
   }));
   legend.hidden = false;

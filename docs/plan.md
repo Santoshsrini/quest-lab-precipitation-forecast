@@ -429,13 +429,13 @@ Santosh wants to finish by the evening of 15 Nov. **No new features after 3 PM I
 
 Noted by Santosh on 15 Nov 2026 after reviewing the summary box and the 4-day panel. Not being worked on yet.
 
-1. **Use the selected place's local time for the forecast.** At present every time, and the meaning of "today", comes from the laptop's own time zone. That was chosen on 15 Nov as the quicker option for the deadline. The forecast should instead follow the local time of the selected location. This needs a way to find a place's time zone from its latitude and longitude, such as the `tz-lookup` library.
+1. **Done on 23 Nov 2026 (step 1).** ~~Use the selected place's local time for the forecast.~~ At the time, every time, and the meaning of "today", comes from the laptop's own time zone. That was chosen on 15 Nov as the quicker option for the deadline. The forecast should instead follow the local time of the selected location. This needs a way to find a place's time zone from its latitude and longitude, such as the `tz-lookup` library.
 2. **Polish and beautify the bottom panel** for the rain forecast. Like the summary box, it should be based on the selected place's local time.
 
 Also still open from earlier:
 
 - Sections 4 and 6 above still describe "About this location" and the old phase split. The note at the top of section 2 overrides them.
-- Filling the start of today from earlier forecast runs and extending the data to 120 hours, so that all four days are complete everywhere. Agreed to do after going live.
+- ~~Filling the start of today from earlier forecast runs and extending the data to 120 hours.~~ Replaced on 23 Nov 2026: the data now reaches 144 hours, and the panel shows only the latest run's blocks for the place's today plus 3 days.
 
 ## Decision Log
 
@@ -491,4 +491,7 @@ Also still open from earlier:
 | 15 Nov 2026 | Panel shows days, times and rain only: no day totals and no summary sentence | Santosh's specification |
 | 15 Nov 2026 | Build the panel first, go live, then extend the data script to make all four days complete | Santosh's choice |
 | 15 Nov 2026 | Map coloured by the rain in the current 3-hour block, from one picture per block written by the data script, with a legend | Santosh's idea; the standout visual element planned as build phase 4 |
+| 23 Nov 2026 | Data reaches 144 hours (48 blocks), the last 3-hourly step of every run | Covers the place's today plus 3 days in every time zone, even if jobs fail; simpler than a tuned number |
+| 23 Nov 2026 | Each parameter in its own folder (`site/data/tp/...`), listed in `meta.json` | More parameters can be added later without changing the layout |
+| 23 Nov 2026 | Panel and summary box in the selected place's time zone (`tz-lookup`); show only latest-run blocks starting in the place's today plus 3 days; a block belongs to the day it starts in | Santosh's new algorithm; removes the confusing previous-day 11:30 PM block |
 | 15 Nov 2026 | Map colours start at 1 mm, in six bands (1, 2.5, 5, 10, 20, 50 mm), 60% solid, smoothed | Starting at 0.1 mm coloured 39% of the globe and hid the land; 1 mm colours about 8.5% |
