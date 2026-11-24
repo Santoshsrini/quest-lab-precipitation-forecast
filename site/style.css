@@ -193,6 +193,7 @@ html, body {
 .box-close:hover { background: var(--hover); color: var(--ink); }
 .box-amount { margin-top: 6px; font-size: 28px; font-weight: 700; color: var(--rain); }
 .box-when { font-size: 13px; color: var(--muted); }
+.box-hazard { margin-top: 2px; font-size: 12px; font-weight: 600; color: #b5532a; }
 .box-message { margin-top: 8px; font-size: 14px; color: var(--muted); }
 .box-more {
   display: block;
@@ -224,12 +225,13 @@ html, body {
 }
 .panel-message .try-again { margin-left: 12px; }
 
-/* ---------- bottom panel (4-day forecast) ---------- */
+/* ---------- bottom panel: day cards and a day's timeline ---------- */
 
 :root {
-  --rain: #2f7fd6;             /* bars and amounts */
-  --column: 38px;              /* width of one 3-hour bar */
-  --panel-height: 282px;          /* taller by one line for the location line */
+  --panel-height: min(560px, 80vh);   /* the panel scrolls inside if it needs more */
+  --accent: #3b6fd8;                  /* selected card, "Now" */
+  --rain: #2f7fd6;                    /* rain amount in the summary box */
+  --soft: #f4f6f9;                    /* card and timeline backgrounds */
 }
 
 #panel {
@@ -242,8 +244,9 @@ html, body {
   z-index: 1100;
   display: flex;
   flex-direction: column;
-  background: #fbfcfd;
-  box-shadow: 0 -2px 14px rgba(0, 0, 0, 0.35);
+  background: #ffffff;
+  border-radius: 18px 18px 0 0;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.28);
 }
 #panel[hidden] { display: none; }
 
@@ -253,71 +256,147 @@ html, body {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 12px 8px 20px;
-  border-bottom: 1px solid var(--line);
+  padding: 12px 14px 8px 22px;
 }
-#panel-title { margin: 0; font-size: 18px; font-weight: 700; }
-#panel-place { margin: 2px 0 0; font-size: 13px; color: var(--ink); }
+#panel-title { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+#panel-place { margin: 3px 0 0; font-size: 13px; color: var(--ink); }
 #panel-note { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
 #panel-close {
   flex: none;
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   border: none;
   border-radius: 50%;
-  background: transparent;
+  background: var(--soft);
   color: var(--muted);
-  font-size: 28px;
+  font-size: 24px;
   line-height: 1;
   cursor: pointer;
 }
-#panel-close:hover { background: var(--hover); color: var(--ink); }
+#panel-close:hover { background: var(--line); color: var(--ink); }
 
-/* the days sit side by side and scroll sideways when they do not fit */
 #panel-body {
   flex: 1;
-  display: flex;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding: 0 8px;
+  overflow-y: auto;
+  padding: 4px 22px 18px;
 }
-.panel-message { margin: auto; font-size: 15px; color: var(--muted); }
+.panel-message { margin: 40px auto; text-align: center; font-size: 15px; color: var(--muted); }
 
-.day {
-  flex: none;
-  padding: 10px 10px 8px;
-  border-right: 1px solid var(--line);       /* the divider between days */
+/* the four day cards */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  gap: 12px;
 }
-.day:last-child { border-right: none; }
-.day-name { font-size: 14px; font-weight: 700; margin-bottom: 6px; white-space: nowrap; }
-
-.chart { position: relative; display: flex; }
-.column {
-  width: var(--column);
+.card {
   display: flex;
   flex-direction: column;
   align-items: center;
-  border-radius: 8px;
-  padding: 3px 0;
+  padding: 10px 8px 9px;
+  border: 1.5px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+  font: inherit;
+  color: var(--ink);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
-.column.now { background: #e8f1fb; }           /* the block that contains the present moment */
-.amount { height: 18px; font-size: 12px; font-weight: 600; color: var(--ink); }
-.track {
-  width: 22px;
-  height: 96px;
+.card:hover { box-shadow: 0 2px 10px rgba(31, 41, 51, 0.08); }
+.card.selected { border-color: var(--accent); background: #f6f9ff; }
+.card:disabled { cursor: default; opacity: 0.6; }
+.card-day { font-size: 15px; font-weight: 700; }
+.card-date { font-size: 12px; color: var(--muted); }
+.card-empty { margin: 30px 0; font-size: 13px; color: var(--muted); }
+.icon { width: 38px; height: 38px; margin: 2px 0 0; }
+.icon .sun { fill: #f2b33d; }
+.icon .rays path { stroke: #f2b33d; stroke-width: 2.4; stroke-linecap: round; }
+.icon .rays { fill: none; }
+.icon .cloud { fill: #c7ced8; }
+.icon .cloud.dark { fill: #6b7380; }
+.icon .drops { stroke: #3b6fd8; stroke-width: 2.4; stroke-linecap: round; fill: none; }
+.icon .bolt { fill: #f2b33d; }
+.icon .flakes { fill: #8fb3e8; }
+.card-condition { font-size: 14px; font-weight: 600; }
+.card-hazard { min-height: 15px; margin-top: 1px; font-size: 11.5px; font-weight: 600; color: #b5532a; }
+.card-temps { margin-top: 3px; font-size: 13px; color: var(--muted); }
+.card-temps b { color: var(--ink); font-weight: 600; }
+.card-total { margin-top: 2px; font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+.pill {
+  margin-top: 4px;
+  padding: 2px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #e9edf2;
+  color: #4a5562;
+}
+.pill.very-light, .pill.light { background: #e5eefc; color: #2f5fb8; }
+.pill.moderate { background: #fdf1c7; color: #8a6400; }
+.pill.heavy { background: #fde3cc; color: #a24d00; }
+.pill.very-heavy, .pill.extreme { background: #fbd9d9; color: #a51f1f; }
+.card-span { margin-top: 3px; font-size: 11px; color: var(--muted); }
+.chance {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 5px;
+  padding: 2px 10px;
+  border-radius: 10px;
+  background: #eef3fb;
+  color: #2f5fb8;
+  font-size: 14px;
+  font-weight: 700;
+}
+.drop { width: 10px; height: 13px; fill: #3b6fd8; }
+.chance-label { margin-top: 4px; font-size: 11px; color: var(--muted); line-height: 1.3; }
+
+/* the selected day's 3-hour timeline */
+.timeline {
+  margin-top: 10px;
+  padding: 10px 16px 8px;
+  border: 1.5px solid var(--line);
+  border-radius: 16px;
+}
+.timeline-title { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+.bars { display: flex; gap: 6px; }
+.slot {
+  flex: 1;
+  min-width: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 0 8px;
+  border-radius: 10px;
+}
+.slot.now { background: var(--soft); }
+.slot-start { font-size: 12px; color: var(--muted); }
+.slot.now .slot-start { color: var(--accent); font-weight: 700; }
+.slot-amount { margin-top: 6px; font-size: 13px; font-weight: 700; }
+.slot-track {
+  width: 60%;
+  max-width: 44px;
+  height: 64px;
   display: flex;
   align-items: flex-end;                        /* bars grow up from the bottom */
-  border-bottom: 2px solid var(--line);
 }
-.bar { width: 100%; height: 0; background: var(--rain); border-radius: 4px 4px 0 0; }
-.time {
-  margin-top: 4px;
-  height: 28px;
-  font-size: 11px;
-  line-height: 1.2;
+.slot-bar { width: 100%; height: 0; border-radius: 5px 5px 2px 2px; }
+.slot-end { margin-top: 5px; font-size: 11px; color: var(--muted); }
+
+.key {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  margin-top: 6px;
+  padding-top: 7px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
   color: var(--muted);
-  text-align: center;
 }
+.key-title { font-weight: 600; color: var(--ink); }
+.key-item { display: inline-flex; align-items: center; gap: 5px; }
+.key-item i { width: 12px; height: 9px; border-radius: 3px; display: inline-block; }
 
 /* while the panel is open, lift the map's corner controls above it */
 body.panel-open .maplibregl-ctrl-bottom-right,
@@ -349,9 +428,9 @@ body.panel-open .maplibregl-ctrl-bottom-left {
 .legend-number { margin-top: 2px; font-size: 10px; color: #d5dae0; }
 #legend-unit { margin-top: 2px; font-size: 10px; color: #aab2bb; }
 
-body.panel-open #legend {
-  bottom: calc(var(--panel-height) + 10px + env(safe-area-inset-bottom, 0px));
-}
+/* the panel covers most of the screen, so the map's key and zoom buttons step aside */
+body.panel-open #legend,
+body.panel-open .maplibregl-ctrl-group { display: none; }
 
 /* ---------- narrow screens (phones) ---------- */
 
@@ -393,5 +472,15 @@ body.panel-open #legend {
   #panel-head { padding-left: 14px; }
   #panel-title { font-size: 16px; }
   #panel-place { font-size: 12px; }
+  #panel-body { padding: 4px 12px 14px; }
+  .cards {
+    display: flex;
+    overflow-x: auto;
+    gap: 10px;
+    padding-bottom: 4px;
+  }
+  .card { flex: 0 0 150px; }
+  .bars { overflow-x: auto; }
+  .slot { flex: 0 0 52px; }
   #panel-note { font-size: 11px; }
 }

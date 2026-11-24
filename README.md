@@ -11,9 +11,14 @@ Built by Santosh Srinivas for the QUEST Lab (IISc) Full Stack AI pre-doctoral se
 When the app opens, the map is coloured wherever at least 1 mm of rain is forecast in the current 3-hour block. The legend in the bottom left shows the colour for each amount and the block's times.
 
 1. Pick a place by clicking the map, or by typing a name in the search bar and choosing a suggestion.
-2. A white dot marks the place. A small box beside it shows the rain forecast for the current 3-hour block.
-3. Press **4-day forecast** in the box. A panel opens at the bottom with one bar per 3-hour block for today and the next three days. The amount in mm is above each bar and the start time below it.
-4. Press the cross on the box or the panel to clear the selection. The map stays where it is.
+2. A white dot marks the place. A small box beside it shows the amount for the current 3-hour block and whether it falls as rain, snow, or rain and snow (or "No rain"), using the same snow share as the day cards. It adds "Freezing rain possible" or "Ice pellets possible" when the model shows them at the end of the block.
+3. Press **4-day forecast** in the box. A panel opens at the bottom with four day cards, today and the next three days, in the place's own time zone. Each card shows:
+   - a condition word and icon (Dry, Mostly dry, Showers, Rain, Thunderstorms likely, Snow, or Rain and snow), plus "Freezing rain at times" or "Ice pellets at times" when the model shows them
+   - the day's high and low temperature
+   - the day's total rain and its intensity, using India Meteorological Department categories
+   - the ensemble's chance of 10 mm or more in the 24 hours that best match the day
+4. Below the cards, the selected day's rain is shown as one bar per 3-hour block, coloured like the map. Press another card to see that day.
+5. Press the cross on the box or the panel to clear the selection. The map stays where it is.
 
 Picking another place while the panel is open updates the panel.
 
@@ -28,11 +33,11 @@ IFS forecast, 0.25°  ->  download total precipitation,   ->  meta.json         
                          cut the globe into tiles
 ```
 
-**1. Fetch.** The script finds the newest fully published run of the ECMWF IFS forecast and downloads one field, total precipitation (`tp`), for steps 0 to 144 hours. That is 49 small files, about 24 MB.
+**1. Fetch.** The script finds the newest fully published run of the ECMWF IFS forecast and downloads, for steps 0 to 144 hours: total precipitation (`tp`), its convective part (`cp`), its snowfall part (`sf`), the 3-hourly highest and lowest temperature (`mx2t3`, `mn2t3`), precipitation type (`ptype`) and storm energy (`mucape`). From the newest 00 or 12 UTC ensemble run it downloads the chance of at least 10 mm in 24 hours (`tpg10`), in 24-hour windows starting every 12 hours.
 
 **2. Process.** `tp` is a running total since the start of the run, in metres. The rain in each 3-hour block is one step's total minus the previous step's, converted to mm.
 
-**3. Tile.** The grid has 721 by 1440 points (about 25 km apart). It is cut into 648 tiles of 10° by 10°, each saved as one JSON file holding 48 values for every grid point in it.
+**3. Tile.** The grid has 721 by 1440 points (about 25 km apart). It is cut into 648 tiles of 10° by 10°, each saved as one gzip-compressed JSON file holding every field for every grid point in it. The browser unpacks the file itself.
 
 **3b. Draw.** The script also saves one small picture of the globe per 3-hour block, coloured by rain amount and transparent below 1 mm. Its rows are re-sampled to the web map's projection so the rain lines up with the coastlines. The page lays the picture for the current block over the map. The picture is for display only: clicks and forecast numbers still come from the tiles.
 
@@ -97,6 +102,8 @@ docs/                           planning documents
 - **Map colours start at 1 mm.** Lighter rain is not coloured on the map, so that the land stays visible. The summary box and the panel still show it. Colours are smoothed between grid points, so at the edge of a coloured area the colour can differ slightly from the number in the summary box.
 - **About 25 km resolution.** The value is for the nearest grid point, which can be up to about 18 km from the picked spot. Single-point values in intense storms can be erratic.
 - **The forecast is 7 to 14 hours old when you see it.** ECMWF publishes each run about 7 hours after it starts. The panel shows when the forecast in use was issued.
+- **Card conditions are worked out, not forecast directly.** They come from the day's summed amounts: Snow when snowfall is at least 80% of the total, Rain and snow when it is over 20%, Showers when at least half the rain is showery. ECMWF open data has no thunderstorm field: "Thunderstorms likely" means the day has at least 5 mm of rain, at least half of it showery, and storm energy of at least 1000 J/kg. The freezing rain and ice pellet lines come from the precipitation type at the end of each 3-hour block only, so they say "at times".
+- **The chance of 10 mm+ can come from an older run, over a slightly different 24 hours.** ECMWF publishes these probabilities only from its 00 and 12 UTC runs, for 24-hour windows starting every 12 hours. Each card names its window, and the panel names both runs.
 - **Scheduled updates can pause.** GitHub stops scheduled jobs in a repository with no activity for 60 days. The job can be restarted from the Actions tab.
 
 ## Data and credits

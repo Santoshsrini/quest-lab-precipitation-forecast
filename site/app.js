@@ -353,19 +353,40 @@ function findPoint(lat, lon) {
   const tileCol = Math.floor(gridCol / per);
   const position = (gridRow - tileRow * per) * per + (gridCol - tileCol * per);
   const two = (n) => String(n).padStart(2, "0");
-  return { file: `r${two(tileRow)}_c${two(tileCol)}.json`, position };
+  return { file: `r${two(tileRow)}_c${two(tileCol)}.json.gz`, position };
 }
 
 // The rain entry in meta.json's list of parameters.
 const rainInfo = () => meta.parameters.find((p) => p.id === "tp");
 
-// Rain for one place: a list of numbers in mm, one per 3-hour block.
-async function loadRain(lat, lon) {
+// Tiles are gzip-compressed JSON (to keep the site small); the browser
+// unpacks them with its built-in DecompressionStream.
+async function fetchGzipJson(url) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`${url}: ${response.status}`);
+  const unpacked = response.body.pipeThrough(new DecompressionStream("gzip"));
+  return JSON.parse(await new Response(unpacked).text());
+}
+
+// Everything the panel needs for one place, as lists:
+//   tp, cp, sf   total, its showery part and its snowfall part, mm per 3-hour block
+//   tmax, tmin   highest and lowest temperature per block, degrees C
+//   wx       weather code per block: hazard * 2 + storm
+//              (hazard at the block's end: 0 none, 1 freezing rain or drizzle, 2 ice pellets)
+//   p10      ensemble chance of 10 mm or more, % per 24-hour window
+async function loadPoint(lat, lon) {
   if (!meta) meta = await fetchJson("data/meta.json");
   const { file, position } = findPoint(lat, lon);
-  const url = `data/${rainInfo().tiles}/${file}`;
-  if (!tileCache.has(url)) tileCache.set(url, await fetchJson(url));
-  return tileCache.get(url).values[position].map((tenths) => tenths / 10);
+  const url = `data/${meta.tiles}/${file}?made=${meta.made}`;
+  if (!tileCache.has(url)) tileCache.set(url, await fetchGzipJson(url));
+  const f = tileCache.get(url).fields;
+  const at = (name) => f[name][position];
+  return {
+    tp: at("tp").map((tenths) => tenths / 10),
+    cp: at("cp").map((tenths) => tenths / 10),
+    sf: at("sf").map((tenths) => tenths / 10),
+    tmax: at("tmax"), tmin: at("tmin"), wx: at("wx"), p10: at("p10"),
+  };
 }
 
 // ------------------------------------------------ local time of a place
@@ -425,7 +446,8 @@ function currentBlock() {
 // place's own time zone. A block belongs to the day in which it starts.
 // Only blocks from the latest forecast run are shown: blocks before the
 // run's start are not in the data, and are always in the past anyway.
-function groupIntoDays(rain, zone) {
+function groupIntoDays(point, zone) {
+  const rain = point.tp;
   const days = [];
   let key = dayKey(new Date(), zone);
   for (let d = 0; d < DAYS_SHOWN; d++) {
@@ -435,7 +457,7 @@ function groupIntoDays(rain, zone) {
   const now = currentBlock();
   for (let k = 0; k < rain.length; k++) {
     const day = days.find((d) => d.key === dayKey(blockStart(k), zone));
-    if (day) day.blocks.push({ start: blockStart(k), mm: rain[k], isNow: k === now });
+    if (day) day.blocks.push({ k, start: blockStart(k), mm: rain[k], isNow: k === now });
   }
   return days;
 }
@@ -495,17 +517,17 @@ async function showForecast() {
     fillBox(null, "Loading forecast…");
   }
 
-  let rain = null;
+  let point = null;
   let problem = "";
   try {
-    rain = await loadRain(lat, lon);
+    point = await loadPoint(lat, lon);
   } catch (error) {
     problem = "Could not load the forecast.";
   }
   if (thisPick !== pickNumber) return;        // another place was picked meanwhile
 
-  if (panelOpen) fillPanel(rain, problem);
-  else fillBox(rain, problem);
+  if (panelOpen) fillPanel(point, problem);
+  else fillBox(point, problem);
 }
 
 function closeForecast() {
@@ -541,7 +563,7 @@ function tryAgainButton() {
 
 // ---- the summary box
 
-function fillBox(rain, message) {
+function fillBox(point, message) {
   const content = el("div", "box");
 
   const head = el("div", "box-head");
@@ -553,19 +575,26 @@ function fillBox(rain, message) {
   head.append(close);
   content.append(head);
 
-  if (!rain) {
+  if (!point) {
     content.append(el("div", "box-message", message));
     if (message.startsWith("Could not")) content.append(tryAgainButton());
   } else {
     const k = currentBlock();
-    const mm = blockValue(rain, k);
+    const mm = blockValue(point.tp, k);
     if (mm === null) {
       content.append(el("div", "box-message", "No forecast for the present time."));
     } else {
       content.append(el("div", "box-amount", `${formatMm(mm)} mm`));
       const zone = selected.zone;
+      const type = mm < 0.1 ? "No rain" : precipType(mm, blockValue(point.sf, k));
       content.append(el("div", "box-when",
-        `Rain, ${formatTime(blockStart(k), zone)} to ${formatTime(blockStart(k + 1), zone)}`));
+        `${type}, ${formatTime(blockStart(k), zone)} to ${formatTime(blockStart(k + 1), zone)}`));
+      // Hazard from ptype at the block's end only, so "possible".
+      const hazard = mm >= 0.1 ? point.wx[k] >> 1 : 0;
+      if (hazard) {
+        content.append(el("div", "box-hazard",
+          hazard === 1 ? "Freezing rain possible" : "Ice pellets possible"));
+      }
     }
     const more = el("button", "box-more", "4-day forecast");
     more.type = "button";
@@ -574,7 +603,8 @@ function fillBox(rain, message) {
       box.remove();                             // the arrow swaps the box for the panel
       box = null;
       panelOpen = true;
-      fillPanel(rain, "");
+      shownDay = 0;
+      fillPanel(point, "");
     });
     content.append(more);
   }
@@ -587,9 +617,109 @@ function fillBox(rain, message) {
     .addTo(map);
 }
 
-// ---- the bottom panel
+// ---- the bottom panel: four day cards, and the 3-hour timeline of one day
 
-function fillPanel(rain, message) {
+let shownDay = 0;                // which day card is selected (0 = today)
+
+// India Meteorological Department's daily rainfall categories, in mm.
+const INTENSITY = [
+  [204.5, "Extremely heavy", "extreme"], [115.6, "Very heavy", "very-heavy"],
+  [64.5, "Heavy", "heavy"], [15.6, "Moderate", "moderate"],
+  [2.5, "Light", "light"], [0.1, "Very light", "very-light"], [0, "No rain", "none"],
+];
+
+// The 24-hour ensemble window that overlaps [from, to) the most.
+function bestWindow(point, from, to) {
+  const runStart = Date.parse(meta.prob_run);
+  let best = null;
+  meta.prob_windows.forEach(([a, b], i) => {
+    const ws = runStart + a * HOUR_MS, we = runStart + b * HOUR_MS;
+    const overlap = Math.min(we, to) - Math.max(ws, from);
+    if (overlap > 0 && (!best || overlap > best.overlap)) {
+      best = { overlap, pct: point.p10[i], start: new Date(ws) };
+    }
+  });
+  return best;
+}
+
+// Rain, snow, or both, from the share of the total that falls as snow.
+// Used by the day cards (day sums) and the summary box (one block).
+function precipType(tp, sf) {
+  const snowy = tp > 0 ? sf / tp : 0;
+  if (snowy >= 0.8) return "Snow";
+  if (snowy > 0.2) return "Rain and snow";
+  return "Rain";
+}
+
+// Everything one day card shows, worked out from that day's 3-hour blocks.
+function summarise(day, point) {
+  const ks = day.blocks.map((b) => b.k);
+  if (ks.length === 0) return null;
+  const sum = (list) => ks.reduce((t, k) => t + list[k], 0);
+  const total = sum(point.tp);
+  // Shares of the day's total, from amounts summed over the whole day.
+  const showery = total > 0 ? sum(point.cp) / total : 0;     // share that is showery
+  const storm = ks.some((k) => point.wx[k] % 2 === 1);       // storm energy reached the threshold
+
+  let condition;
+  const type = precipType(total, sum(point.sf));
+  if (total < 0.2) condition = "Dry";
+  else if (total < 1) condition = "Mostly dry";
+  else if (type !== "Rain") condition = type;              // Snow, or Rain and snow
+  else if (storm && showery >= 0.5 && total >= 5) condition = "Thunderstorms likely";
+  else if (showery >= 0.5) condition = "Showers";
+  else condition = "Rain";
+
+  // Hazards that snowfall amounts can't show, from ptype at block ends:
+  // listed if any wet block (0.1 mm or more) shows them.
+  const wet = ks.filter((k) => point.tp[k] >= 0.1);
+  const hazards = [];
+  if (wet.some((k) => point.wx[k] >> 1 === 1)) hazards.push("Freezing rain at times");
+  if (wet.some((k) => point.wx[k] >> 1 === 2)) hazards.push("Ice pellets at times");
+
+  const from = blockStart(ks[0]), to = blockStart(ks.at(-1) + 1);
+  return {
+    total, condition, hazards,
+    intensity: INTENSITY.find(([min]) => total >= min),
+    high: Math.max(...ks.map((k) => point.tmax[k])),
+    low: Math.min(...ks.map((k) => point.tmin[k])),
+    from, to,
+    chance: bestWindow(point, from.getTime(), to.getTime()),
+  };
+}
+
+// Small line icons for each condition (drawn in SVG, no image files).
+const ICONS = {
+  "Dry": '<circle cx="24" cy="24" r="8" class="sun"/><g class="rays"><path d="M24 6v5M24 37v5M6 24h5M37 24h5M11.3 11.3l3.5 3.5M33.2 33.2l3.5 3.5M11.3 36.7l3.5-3.5M33.2 14.8l3.5-3.5"/></g>',
+  "Mostly dry": '<circle cx="18" cy="17" r="6" class="sun"/><path class="cloud" d="M16 36h20a7 7 0 0 0 0-14 9 9 0 0 0-17 3 5.5 5.5 0 0 0-3 11z"/>',
+  "Showers": '<circle cx="16" cy="14" r="5" class="sun"/><path class="cloud" d="M14 30h20a7 7 0 0 0 0-14 9 9 0 0 0-17 3 5.5 5.5 0 0 0-3 11z"/><path class="drops" d="M19 35l-1.5 4M27 35l-1.5 4"/>',
+  "Rain": '<path class="cloud dark" d="M12 28h22a8 8 0 0 0 0-16 10 10 0 0 0-19 3 6.5 6.5 0 0 0-3 13z"/><path class="drops" d="M17 33l-2 5M24 33l-2 5M31 33l-2 5"/>',
+  "Thunderstorms likely": '<path class="cloud dark" d="M12 27h22a8 8 0 0 0 0-16 10 10 0 0 0-19 3 6.5 6.5 0 0 0-3 13z"/><path class="bolt" d="M25 29l-5 8h5l-3 7 8-10h-5l3-5z"/><path class="drops" d="M15 32l-2 5M33 32l-2 5"/>',
+  "Snow": '<path class="cloud" d="M12 26h22a8 8 0 0 0 0-16 10 10 0 0 0-19 3 6.5 6.5 0 0 0-3 13z"/><g class="flakes"><circle cx="17" cy="34" r="1.6"/><circle cx="24" cy="38" r="1.6"/><circle cx="31" cy="34" r="1.6"/></g>',
+  "Rain and snow": '<path class="cloud" d="M12 26h22a8 8 0 0 0 0-16 10 10 0 0 0-19 3 6.5 6.5 0 0 0-3 13z"/><path class="drops" d="M17 31l-2 5M31 31l-2 5"/><g class="flakes"><circle cx="24" cy="36" r="1.6"/></g>',
+};
+function icon(condition) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 48 48");
+  svg.setAttribute("class", "icon");
+  svg.setAttribute("aria-hidden", "true");
+  svg.innerHTML = ICONS[condition];
+  return svg;
+}
+
+// Colour of a 3-hour bar: the map's colour bands, and a pale blue under 1 mm.
+function barColour(mm) {
+  const band = [...rainInfo().colours].reverse().find((c) => mm >= c.from);
+  return band ? band.colour : "#c9d7ec";
+}
+
+function utcText(iso) {
+  const d = new Date(Date.parse(iso));
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }) +
+    ", " + d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" }) + " UTC";
+}
+
+function fillPanel(point, message) {
   panel.hidden = false;
   document.body.classList.add("panel-open");
   panelTitle.textContent = selected.name;
@@ -597,7 +727,7 @@ function fillPanel(rain, message) {
                                 : `Picked ${formatCoordinates(selected.lat, selected.lon)}`;
   panelBody.replaceChildren();
 
-  if (!rain) {
+  if (!point) {
     panelNote.textContent = "";
     const note = el("div", "panel-message", message);
     if (message.startsWith("Could not")) note.append(tryAgainButton());
@@ -605,37 +735,93 @@ function fillPanel(rain, message) {
     return;
   }
 
-  const issued = new Date(Date.parse(meta.run));
-  const issuedText = issued.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }) +
-    ", " + issued.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" }) + " UTC";
   const zone = selected.zone;
-  panelNote.textContent = `ECMWF forecast issued ${issuedText} · mm of rain per 3 hours · ` +
-    `times in ${zoneLabel(zone)}`;
+  panelNote.textContent = `Times in ${zoneLabel(zone)} · ECMWF IFS run ${utcText(meta.run)}` +
+    ` · chance of rain from ensemble run ${utcText(meta.prob_run)}`;
 
-  const days = groupIntoDays(rain, zone);
-  const largest = Math.max(MIN_SCALE_MM, ...days.flatMap((d) => d.blocks.map((b) => b.mm)));
+  const days = groupIntoDays(point, zone);
+  const summaries = days.map((day) => summarise(day, point));
+  if (!summaries[shownDay]) shownDay = 0;
 
-  days.forEach((day, index) => {
-    const section = el("div", "day");
-    section.append(el("div", "day-name", (index === 0 ? "Today · " : "") + dayName(day.key)));
-
-    const chart = el("div", "chart");
-    for (const block of day.blocks) {
-      const column = el("div", "column" + (block.isNow ? " now" : ""));
-      column.append(el("div", "amount", formatMm(block.mm)));
-      const track = el("div", "track");
-      const bar = el("div", "bar");
-      if (block.mm) bar.style.height = `${Math.max(3, (block.mm / largest) * 100)}%`;
-      track.append(bar);
-      column.append(track);
-      column.append(el("div", "time", formatTime(block.start, zone)));
-      chart.append(column);
+  // The four day cards.
+  const cards = el("div", "cards");
+  days.forEach((day, i) => {
+    const s = summaries[i];
+    const card = el("button", "card" + (i === shownDay ? " selected" : ""));
+    card.type = "button";
+    // dayName gives "Tuesday 24 Nov": the card shows "Today" / "Tue 24 Nov", or "Wed" / "25 Nov".
+    const [weekday, ...date] = dayName(day.key).split(" ");
+    card.append(el("div", "card-day", i === 0 ? "Today" : weekday.slice(0, 3)));
+    card.append(el("div", "card-date", i === 0 ? `${weekday.slice(0, 3)} ${date.join(" ")}` : date.join(" ")));
+    if (!s) {
+      card.append(el("div", "card-empty", "Not yet available"));
+      card.disabled = true;
+    } else {
+      card.append(icon(s.condition));
+      card.append(el("div", "card-condition", s.condition));
+      // Keep the cards lined up: reserve the hazard line on every card if any has one.
+      if (summaries.some((x) => x && x.hazards.length)) {
+        card.append(el("div", "card-hazard", s.hazards.join(" · ")));
+      }
+      const temps = el("div", "card-temps");
+      temps.innerHTML = `H <b>${s.high}°C</b>&nbsp;&nbsp;L <b>${s.low}°C</b>`;
+      card.append(temps);
+      card.append(el("div", "card-total", `${s.total === 0 ? "0" : s.total.toFixed(1)} mm`));
+      card.append(el("div", `pill ${s.intensity[2]}`, s.intensity[1]));
+      card.append(el("div", "card-span", `${formatTime(s.from, zone)} to ${formatTime(s.to, zone)}`));
+      if (s.chance) {
+        const chance = el("div", "chance");
+        chance.innerHTML = '<svg viewBox="0 0 12 16" class="drop" aria-hidden="true"><path d="M6 1C6 1 1 7.5 1 10.5a5 5 0 0 0 10 0C11 7.5 6 1 6 1z"/></svg>';
+        chance.append(` ${s.chance.pct < 5 ? "under 5" : s.chance.pct}%`);
+        card.append(chance);
+        card.append(el("div", "chance-label",
+          `chance of 10 mm+ · 24 h from ${formatTime(s.chance.start, zone)}`));
+      }
+      card.addEventListener("click", () => { shownDay = i; fillPanel(point, ""); });
     }
-    if (day.blocks.length === 0) chart.append(el("div", "panel-message", "Not yet available"));
-
-    section.append(chart);
-    panelBody.append(section);
+    cards.append(card);
   });
+  panelBody.append(cards);
+
+  // The timeline of the selected day.
+  const day = days[shownDay];
+  const timeline = el("div", "timeline");
+  timeline.append(el("div", "timeline-title",
+    (shownDay === 0 ? "Today, " : "") + dayName(day.key)));
+  const largest = Math.max(MIN_SCALE_MM, ...day.blocks.map((b) => b.mm));
+  const bars = el("div", "bars");
+  for (const b of day.blocks) {
+    const column = el("div", "slot" + (b.isNow ? " now" : ""));
+    column.append(el("div", "slot-start", b.isNow ? "Now" : formatTime(b.start, zone)));
+    column.append(el("div", "slot-amount", formatMm(b.mm)));
+    const track = el("div", "slot-track");
+    const bar = el("div", "slot-bar");
+    if (b.mm > 0) {
+      bar.style.height = `${Math.max(4, (b.mm / largest) * 100)}%`;
+      bar.style.background = barColour(b.mm);
+    }
+    track.append(bar);
+    column.append(track);
+    column.append(el("div", "slot-end", `to ${formatTime(blockStart(b.k + 1), zone)}`));
+    bars.append(column);
+  }
+  timeline.append(bars);
+
+  // Colour key, the same bands as the map.
+  const key = el("div", "key");
+  key.append(el("span", "key-title", "mm of rain per 3 hours"));
+  const keyItem = (colour, text) => {
+    const item = el("span", "key-item");
+    const swatch = el("i");
+    swatch.style.background = colour;
+    item.append(swatch, text);
+    key.append(item);
+  };
+  keyItem("#c9d7ec", "under 1");
+  const bands = rainInfo().colours;
+  bands.forEach((c, i) => keyItem(c.colour, i + 1 < bands.length ? `${c.from}–${bands[i + 1].from}` : `${c.from}+`));
+  timeline.append(key);
+  panelBody.append(timeline);
 }
 
 document.getElementById("panel-close").addEventListener("click", clearSelection);

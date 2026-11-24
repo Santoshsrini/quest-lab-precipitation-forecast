@@ -142,7 +142,7 @@ Values are still stored to 0.1 mm, but beyond the first day they are not accurat
 
 ### Step 6. Save each tile as a JSON file
 
-- **File name:** `site/data/tp/tiles/r07_c25.json` for tile row 7, tile column 25. Each parameter has its own folder (`tp` is rain), so more parameters can be added without changing the layout.
+- **File name:** `site/data/tiles/r07_c25.json.gz` for tile row 7, tile column 25 (from 24 Nov; see "Day-card fields"). Rain pictures stay in `site/data/tp/pictures/`.
 - **Values:** whole numbers of tenths of a mm, so 4.2 mm is stored as 42.
 - **Order of the `values` list:** row by row. All of the tile's first row from west to east, then its second row, and so on. Each entry is one grid point's 48 block values, block 0 first.
 
@@ -190,6 +190,36 @@ All times are in UTC.
 ### Step 8. Publish
 
 The files go into `site/data/` beside the web page, and the scheduled job publishes the whole `site/` folder.
+
+## Day-card fields (added 24 Nov 2026)
+
+The bottom panel's day cards need more than rain. The script downloads these too, from the same main run unless noted, and stores them in the same tiles.
+
+| Field in the tile | ECMWF field | Per | Stored as |
+|---|---|---|---|
+| `cp` | `cp`, convective (showery) precipitation, a running total like `tp` | 3-hour block | tenths of a mm, worked out by the same subtraction and precision rule as rain |
+| `sf` | `sf`, snowfall as depth of water, a running total like `tp`; part of `tp` | 3-hour block | tenths of a mm, same subtraction and precision rule |
+| `tmax` | `mx2t3`, highest 2 m temperature in the last 3 hours | 3-hour block | whole °C |
+| `tmin` | `mn2t3`, lowest 2 m temperature in the last 3 hours | 3-hour block | whole °C |
+| `wx` | `ptype` at the block's end, and `mucape` at either end | 3-hour block | hazard × 2 + storm. Hazard: 0 none, 1 freezing rain or drizzle (codes 3, 12), 2 ice pellets (code 8). Storm: 1 if storm energy reaches 1000 J/kg. The ECMWF `ptype` download is unchanged; the script only groups its codes |
+| `p10` | ensemble `tpg10`, chance of at least 10 mm in 24 hours | 24-hour window | whole percent. 12 windows from the ensemble run's start: 0–24, 12–36, … 132–156 h |
+
+**The ensemble run** is the newest 00 or 12 UTC run whose last needed window is published. It can be 6 hours older than the main run. `meta.json` records it as `prob_run` with its windows as `prob_windows`.
+
+**Tiles** now hold every field and are gzip-compressed (`site/data/tiles/r07_c25.json.gz`): `{"rows", "cols", "fields": {"tp": [...], "cp": [...], "sf": [...], "tmax": [...], "tmin": [...], "wx": [...], "p10": [...]}}`. Each field lists one entry per grid point in the same order as before. The page unpacks a tile with the browser's built-in `DecompressionStream`. All 648 tiles total about 60 MB.
+
+**How the page uses them for a card** (for the blocks in the place's local day):
+
+- Total rain: sum of `tp`. Intensity from the total, India Meteorological Department categories: Very light under 2.5 mm, Light to 15.5, Moderate to 64.4, Heavy to 115.5, Very heavy to 204.4, then Extremely heavy.
+- Snow share: sum of `sf` ÷ sum of `tp`. Showery share: sum of `cp` ÷ sum of `tp`. Both use amounts over the whole day, not snapshots.
+- Condition, in order: under 0.2 mm Dry; under 1 mm Mostly dry; snow share at least 80% → Snow; snow share over 20% → Rain and snow; any storm block, at least half showery and at least 5 mm → Thunderstorms likely; at least half showery → Showers; otherwise Rain.
+- Extra line: "Freezing rain at times" or "Ice pellets at times" if any block with at least 0.1 mm shows that `ptype` at its end. These are snapshots, so they say "at times".
+- High and low: highest `tmax` and lowest `tmin`.
+- Chance of 10 mm+: the `p10` window that overlaps the day the most, shown with its start time.
+
+**Checks added:** all seven fields in every tile; showery rain and snowfall not negative and not above total rain beyond precision; temperatures plausible; high not more than 1 °C below low (rounding of two separately stored fields, seen in 0.19% of blocks); weather codes 0 to 5; chances 0 to 100%; ensemble run is 00 or 12 UTC and not newer than the main run; today plus 3 days lies inside the ensemble windows for every time zone.
+
+**Downloads** are written to a temporary name and kept only if every step arrived, after a download that stopped half way was nearly reused on 24 Nov.
 
 ## How the page finds a point's forecast
 

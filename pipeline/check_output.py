@@ -7,6 +7,7 @@ Run it with:   .venv/bin/python pipeline/check_output.py
 It prints PASS or FAIL for each check and exits with an error if any fail.
 """
 
+import gzip
 import json
 import sys
 from datetime import datetime, timedelta, timezone
@@ -29,7 +30,7 @@ def check(name, passed, detail=""):
 def read_point(lat, lon, tiles):
     """Read a point's values from the tile files, as the page does."""
     tile_row, tile_col, position = ff.find_point(lat, lon)
-    return tiles[(tile_row, tile_col)]["values"][position]
+    return tiles[(tile_row, tile_col)]["fields"][ff.RAIN][position]
 
 
 def nearest_index(lat, lon, grid_lat, grid_lon):
@@ -46,14 +47,14 @@ with open(ff.DATA / "meta.json") as f:
     meta = json.load(f)
 rain_meta = next(p for p in meta["parameters"] if p["id"] == ff.RAIN)
 tiles = {}
-for path in sorted((ff.DATA / rain_meta["tiles"]).glob("*.json")):
-    with open(path) as f:
+for path in sorted((ff.DATA / meta["tiles"]).glob("*.json.gz")):
+    with gzip.open(path, "rt") as f:
         tiles[(int(path.name[1:3]), int(path.name[5:7]))] = json.load(f)
 
 # ---- the tile files
 rows_40 = sum(1 for t in tiles.values() if t["rows"] == 40)
 rows_41 = sum(1 for t in tiles.values() if t["rows"] == 41)
-points = sum(len(t["values"]) for t in tiles.values())
+points = sum(len(t["fields"][ff.RAIN]) for t in tiles.values())
 check("648 tile files", len(tiles) == 648, f"found {len(tiles)}")
 check("612 tiles with 40 rows, 36 with 41 rows", (rows_40, rows_41) == (612, 36),
       f"{rows_40} and {rows_41}")
@@ -61,11 +62,11 @@ check("41-row tiles are exactly tile row 17",
       all((t["rows"] == 41) == (key[0] == 17) for key, t in tiles.items()))
 check("points add up to 1,038,240", points == 1_038_240, f"{points:,}")
 check(f"every point has {ff.BLOCKS} blocks",
-      all(len(p) == ff.BLOCKS for t in tiles.values() for p in t["values"]))
+      all(len(p) == ff.BLOCKS for t in tiles.values() for p in t["fields"][ff.RAIN]))
 check("list length = rows x cols in every tile",
-      all(len(t["values"]) == t["rows"] * t["cols"] for t in tiles.values()))
+      all(len(f) == t["rows"] * t["cols"] for t in tiles.values() for f in t["fields"].values()))
 
-everything = np.concatenate([np.array(t["values"]).ravel() for t in tiles.values()])
+everything = np.concatenate([np.array(t["fields"][ff.RAIN]).ravel() for t in tiles.values()])
 check("no negative values", everything.min() >= 0, f"smallest {everything.min()}")
 check("no implausibly large values", everything.max() < ff.MAX_PLAUSIBLE_MM * 10,
       f"largest {everything.max() / 10:.1f} mm in 3 hours")
@@ -160,6 +161,41 @@ dry = np.argwhere(rain[0, 24:697, :] == 0)[0]
 dry_pixel = pixel_for(float(grid_lat[dry[0] + 24]), float(grid_lon[dry[1]]))
 check("a dry point is transparent", int(images[0][dry_pixel]) == 0)
 
+# ---- the day-card fields
+def field(name):
+    return np.concatenate([np.array(t["fields"][name]).reshape(-1) for t in tiles.values()])
+
+cp, sf, tmax, tmin, wx, p10 = (field(n) for n in ("cp", "sf", "tmax", "tmin", "wx", "p10"))
+check("every tile has all seven fields",
+      all(set(t["fields"]) == {"tp", "cp", "sf", "tmax", "tmin", "wx", "p10"} for t in tiles.values()))
+check("p10 has one value per ensemble window",
+      all(len(v) == len(meta["prob_windows"]) for t in tiles.values() for v in t["fields"]["p10"]))
+check("showery rain is never negative", cp.min() >= 0, f"smallest {cp.min()}")
+# The showery part can exceed the total only by the files' precision.
+cp_over = (cp - everything)
+check("showery rain is not more than total rain (beyond precision)", cp_over.max() <= 10,
+      f"largest excess {cp_over.max() / 10:.1f} mm")
+check("snowfall is never negative", sf.min() >= 0, f"smallest {sf.min()}")
+sf_over = (sf - everything)
+check("snowfall is not more than total rain (beyond precision)", sf_over.max() <= 10,
+      f"largest excess {sf_over.max() / 10:.1f} mm")
+check("there is some snowfall somewhere", sf.max() > 0)
+check("temperatures are plausible", -95 < tmin.min() and tmax.max() < 65,
+      f"{tmin.min()} to {tmax.max()} C")
+# High and low are stored separately and rounded to whole degrees, so when
+# the temperature barely changes in 3 hours the high can come out 1 C below
+# the low. Any bigger gap would be an error.
+check("high is never more than 1 C (rounding) below low in the same block",
+      (tmax - tmin).min() >= -1, f"smallest difference {(tmax - tmin).min()} C")
+check("weather codes are 0 to 5", wx.min() >= 0 and wx.max() <= 5)
+check("chance of 10 mm is 0 to 100%", p10.min() >= 0 and p10.max() <= 100)
+
+prob_start = datetime.strptime(meta["prob_run"], "%Y-%m-%dT%H:%MZ").replace(tzinfo=timezone.utc)
+check("ensemble run is 00 or 12 UTC, not after the main run",
+      prob_start.hour in (0, 12) and prob_start <= datetime.strptime(meta["run"], "%Y-%m-%dT%H:%MZ").replace(tzinfo=timezone.utc),
+      f"{meta['prob_run']} for main run {meta['run']}")
+prob_end = prob_start + timedelta(hours=meta["prob_windows"][-1][1])
+
 # ---- the run is the newest one ECMWF has published in full
 from ecmwf.opendata import Client
 
@@ -185,7 +221,7 @@ for hours_later in (0, 13):
         local = moment + offset
         local_midnight = local.replace(hour=0, minute=0, second=0, microsecond=0)
         window_end = local_midnight + timedelta(days=4) - offset      # back in UTC
-        if window_end > data_end:
+        if window_end > data_end or window_end > prob_end:
             short.append(f"UTC{quarter / 4:+g} at +{hours_later} h")
 check("today plus 3 days is inside the data in every time zone", not short,
       f"data ends {data_end:%d %b %H:%M} UTC" + (f"; short for {short[:3]}" if short else ""))
