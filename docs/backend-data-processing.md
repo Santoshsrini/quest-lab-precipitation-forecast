@@ -212,7 +212,7 @@ The bottom panel's day cards need more than rain. The script downloads these too
 
 - Total rain: sum of `tp`. Intensity from the total, India Meteorological Department categories: Very light under 2.5 mm, Light to 15.5, Moderate to 64.4, Heavy to 115.5, Very heavy to 204.4, then Extremely heavy.
 - Snow share: sum of `sf` ÷ sum of `tp`. Showery share: sum of `cp` ÷ sum of `tp`. Both use amounts over the whole day, not snapshots.
-- Condition, in order: under 0.2 mm Dry; under 1 mm Mostly dry; snow share at least 80% → Snow; snow share over 20% → Rain and snow; any storm block, at least half showery and at least 5 mm → Thunderstorms likely; at least half showery → Showers; otherwise Rain.
+- Condition, in order: under 0.2 mm Dry; under 1 mm Mostly dry; snow share at least 80% → Snow; snow share over 20% → Rain and snow; any storm block, at least half showery and at least 5 mm → Storms likely; at least half showery → Showers; otherwise Rain.
 - Extra line: "Freezing rain at times" or "Ice pellets at times" if any block with at least 0.1 mm shows that `ptype` at its end. These are snapshots, so they say "at times".
 - High and low: highest `tmax` and lowest `tmin`.
 - Chance of 10 mm+: the `p10` window that overlaps the day the most. The day is the span of its blocks, e.g. 1 AM to 1 AM at UTC+7.

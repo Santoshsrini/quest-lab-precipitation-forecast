@@ -165,7 +165,10 @@ html, body {
   pointer-events: none;        /* clicks pass through to the map */
 }
 
-/* ---------- switch between the two maps (rain amount / rain type) ---------- */
+/* ---------- switch between the two maps (precipitation amount / type) ----------
+   Each button: a round colour icon on the right, its label in a pill that
+   comes out of the icon's left side. Top right, under the name. Both look
+   the same; the selected one gets a blue border, like a selected day card. */
 
 #mode {
   position: fixed;
@@ -174,24 +177,46 @@ html, body {
   z-index: 999;                /* below the search suggestions on a phone */
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  align-items: flex-end;
+  gap: 10px;
 }
 #mode[hidden] { display: none; }
 #mode button {
-  padding: 7px 14px;
+  display: flex;
+  align-items: center;
+  padding: 0;
   border: 0;
-  border-radius: 999px;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+.mode-label {
+  margin-right: -20px;         /* the pill runs in behind the icon */
+  padding: 7px 28px 7px 14px;
+  border-radius: 999px 0 0 999px;
+  border: 2px solid transparent;
+  border-right: 0;
   background: rgba(30, 32, 34, 0.78);
   color: #e3e7ec;
-  font: inherit;
   font-size: 13px;
   font-weight: 600;
-  text-align: right;
-  cursor: pointer;
+  white-space: nowrap;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  transition: background 0.15s, color 0.15s;
 }
-#mode button:hover { background: rgba(30, 32, 34, 0.92); }
-#mode button[aria-pressed="true"] { background: #fff; color: #1f2328; }
+.mode-icon {
+  position: relative;          /* sits on top of the pill's end */
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid rgba(30, 32, 34, 0.85);
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.4);
+  background: #888;            /* replaced by the colours from meta.json */
+}
+#mode button:hover .mode-label { background: rgba(30, 32, 34, 0.92); }
+#mode button[aria-pressed="true"] .mode-label { border-color: var(--accent); color: #fff; }
+#mode button[aria-pressed="true"] .mode-icon { border-color: var(--accent); }
 
 /* ---------- summary box (attached to the white dot) ---------- */
 
@@ -313,30 +338,33 @@ html, body {
 /* the four day cards */
 .cards {
   display: grid;
-  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  grid-template-columns: repeat(4, minmax(190px, 1fr));
   gap: 12px;
+  overflow-x: auto;              /* narrow windows: the row scrolls instead of squeezing */
+  padding: 2px 2px 4px;          /* room for the selected card's shadow */
 }
 .card {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  padding: 10px 8px 9px;
+  align-items: stretch;
+  padding: 12px 12px 10px;
   border: 1.5px solid var(--line);
-  border-radius: 16px;
+  border-radius: 18px;
   background: #fff;
   font: inherit;
   color: var(--ink);
-  text-align: center;
+  text-align: left;
   cursor: pointer;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 .card:hover { box-shadow: 0 2px 10px rgba(31, 41, 51, 0.08); }
-.card.selected { border-color: var(--accent); background: #f6f9ff; }
+.card.selected { border-color: var(--accent); background: #f6f9ff; box-shadow: 0 2px 12px rgba(59, 111, 216, 0.12); }
 .card:disabled { cursor: default; opacity: 0.6; }
-.card-day { font-size: 15px; font-weight: 700; }
+.card-top { display: flex; justify-content: space-between; align-items: flex-start; }
+.card-day { font-size: 16px; font-weight: 700; }
 .card-date { font-size: 12px; color: var(--muted); }
 .card-empty { margin: 30px 0; font-size: 13px; color: var(--muted); }
-.icon { width: 38px; height: 38px; margin: 2px 0 0; }
+.icon { width: 40px; height: 40px; margin: -2px -2px 0 0; flex: none; }
 .icon .sun { fill: #f2b33d; }
 .icon .rays path { stroke: #f2b33d; stroke-width: 2.4; stroke-linecap: round; }
 .icon .rays { fill: none; }
@@ -345,13 +373,56 @@ html, body {
 .icon .drops { stroke: #3b6fd8; stroke-width: 2.4; stroke-linecap: round; fill: none; }
 .icon .bolt { fill: #f2b33d; }
 .icon .flakes { fill: #8fb3e8; }
-.card-condition { font-size: 14px; font-weight: 600; }
-.card-hazard { min-height: 15px; margin-top: 1px; font-size: 11.5px; font-weight: 600; color: #b5532a; }
-.card-temps { margin-top: 3px; font-size: 13px; color: var(--muted); }
-.card-temps b { color: var(--ink); font-weight: 600; }
-.card-total { margin-top: 2px; font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+.card-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 8px;
+}
+.card-condition { font-size: 14px; font-weight: 600; white-space: nowrap; }
+.card-hazard { min-height: 15px; margin-top: 2px; font-size: 11.5px; font-weight: 600; color: #b5532a; }
+.card-temps { font-size: 13px; color: var(--muted); white-space: nowrap; }
+.card-temps b { color: var(--ink); font-weight: 700; }
+
+/* inner box: rainfall left, chance of 10 mm+ right */
+.card-box {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 9px 10px 10px;
+  border-radius: 13px;
+  background: #fff;
+  border: 1px solid #eef1f5;
+}
+.card.selected .card-box { border-color: #e3eaf7; }
+.card-rain { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+.card-chance { display: flex; flex-direction: column; align-items: center; flex: none; }
+.card-label { font-size: 12px; color: var(--muted); }
+.card-total { margin-top: 1px; font-size: 26px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
+.card-unit { margin-left: 3px; font-size: 13px; font-weight: 500; color: var(--muted); letter-spacing: 0; }
+.card-note { margin-top: 7px; font-size: 10.5px; line-height: 1.35; color: var(--muted); }
+
+/* ring gauge for the chance of 10 mm+ */
+.ring { position: relative; width: 46px; height: 46px; margin-top: 3px; }
+.ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.ring circle { fill: none; stroke-width: 4.5; }
+.ring-track { stroke: #e6ebf2; }
+.ring-arc { stroke: #3b6fd8; stroke-linecap: round; }
+.ring-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #2f5fb8;
+}
 .pill {
-  margin-top: 4px;
+  margin-top: 5px;
   padding: 2px 10px;
   border-radius: 8px;
   font-size: 12px;
@@ -363,21 +434,6 @@ html, body {
 .pill.moderate { background: #fdf1c7; color: #8a6400; }
 .pill.heavy { background: #fde3cc; color: #a24d00; }
 .pill.very-heavy, .pill.extreme { background: #fbd9d9; color: #a51f1f; }
-.card-span { margin-top: 3px; font-size: 11px; color: var(--muted); }
-.chance {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-top: 5px;
-  padding: 2px 10px;
-  border-radius: 10px;
-  background: #eef3fb;
-  color: #2f5fb8;
-  font-size: 14px;
-  font-weight: 700;
-}
-.drop { width: 10px; height: 13px; fill: #3b6fd8; }
-.chance-label { margin-top: 4px; font-size: 11px; color: var(--muted); line-height: 1.3; }
 
 /* the selected day's 3-hour timeline */
 .timeline {
@@ -398,9 +454,10 @@ html, body {
   border-radius: 10px;
 }
 .slot.now { background: var(--soft); }
-.slot-start { font-size: 12px; color: var(--muted); }
+.slot-now { min-height: 16px; font-size: 12px; font-weight: 700; color: var(--accent); }
+.slot-start { margin-top: 6px; font-size: 12px; color: var(--muted); }
 .slot.now .slot-start { color: var(--accent); font-weight: 700; }
-.slot-amount { margin-top: 6px; font-size: 13px; font-weight: 700; }
+.slot-amount { margin-top: 4px; font-size: 13px; font-weight: 700; }
 .slot-track {
   width: 60%;
   max-width: 44px;
@@ -409,7 +466,6 @@ html, body {
   align-items: flex-end;                        /* bars grow up from the bottom */
 }
 .slot-bar { width: 100%; height: 0; border-radius: 5px 5px 2px 2px; }
-.slot-end { margin-top: 5px; font-size: 11px; color: var(--muted); }
 
 .key {
   display: flex;
@@ -488,8 +544,8 @@ body.panel-open .maplibregl-ctrl-attrib { display: none; }
   }
 
   /* the map switch sits under the search bar, side by side */
-  #mode { top: calc(var(--gap) + 56px + env(safe-area-inset-top, 0px)); flex-direction: row; }
-  #mode button { padding: 6px 12px; font-size: 12px; }
+  .mode-label { font-size: 12px; padding: 6px 26px 6px 12px; }
+  .mode-icon { width: 36px; height: 36px; }
 
   /* fingers zoom by pinching, so the buttons are not needed */
   .maplibregl-ctrl-group { display: none; }
@@ -517,7 +573,7 @@ body.panel-open .maplibregl-ctrl-attrib { display: none; }
     gap: 10px;
     padding-bottom: 4px;
   }
-  .card { flex: 0 0 150px; }
+  .card { flex: 0 0 208px; }
   .bars { overflow-x: auto; }
   .slot { flex: 0 0 52px; }
   #panel-note { font-size: 11px; }

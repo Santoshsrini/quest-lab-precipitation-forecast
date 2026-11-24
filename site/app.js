@@ -820,7 +820,7 @@ function summarise(day, point) {
   if (total < 0.2) condition = "Dry";
   else if (total < 1) condition = "Mostly dry";
   else if (type !== "Rain") condition = type;              // Snow, or Rain and snow
-  else if (storm && showery >= 0.5 && total >= 5) condition = "Thunderstorms likely";
+  else if (storm && showery >= 0.5 && total >= 5) condition = "Storms likely";
   else if (showery >= 0.5) condition = "Showers";
   else condition = "Rain";
 
@@ -848,10 +848,25 @@ const ICONS = {
   "Mostly dry": '<circle cx="18" cy="17" r="6" class="sun"/><path class="cloud" d="M16 36h20a7 7 0 0 0 0-14 9 9 0 0 0-17 3 5.5 5.5 0 0 0-3 11z"/>',
   "Showers": '<circle cx="16" cy="14" r="5" class="sun"/><path class="cloud" d="M14 30h20a7 7 0 0 0 0-14 9 9 0 0 0-17 3 5.5 5.5 0 0 0-3 11z"/><path class="drops" d="M19 35l-1.5 4M27 35l-1.5 4"/>',
   "Rain": '<path class="cloud dark" d="M12 28h22a8 8 0 0 0 0-16 10 10 0 0 0-19 3 6.5 6.5 0 0 0-3 13z"/><path class="drops" d="M17 33l-2 5M24 33l-2 5M31 33l-2 5"/>',
-  "Thunderstorms likely": '<path class="cloud dark" d="M12 27h22a8 8 0 0 0 0-16 10 10 0 0 0-19 3 6.5 6.5 0 0 0-3 13z"/><path class="bolt" d="M25 29l-5 8h5l-3 7 8-10h-5l3-5z"/><path class="drops" d="M15 32l-2 5M33 32l-2 5"/>',
+  "Storms likely": '<path class="cloud dark" d="M12 27h22a8 8 0 0 0 0-16 10 10 0 0 0-19 3 6.5 6.5 0 0 0-3 13z"/><path class="bolt" d="M25 29l-5 8h5l-3 7 8-10h-5l3-5z"/><path class="drops" d="M15 32l-2 5M33 32l-2 5"/>',
   "Snow": '<path class="cloud" d="M12 26h22a8 8 0 0 0 0-16 10 10 0 0 0-19 3 6.5 6.5 0 0 0-3 13z"/><g class="flakes"><circle cx="17" cy="34" r="1.6"/><circle cx="24" cy="38" r="1.6"/><circle cx="31" cy="34" r="1.6"/></g>',
   "Rain and snow": '<path class="cloud" d="M12 26h22a8 8 0 0 0 0-16 10 10 0 0 0-19 3 6.5 6.5 0 0 0-3 13z"/><path class="drops" d="M17 31l-2 5M31 31l-2 5"/><g class="flakes"><circle cx="24" cy="36" r="1.6"/></g>',
 };
+// A ring gauge for a chance in %: a grey track and a blue arc, the number inside.
+function ring(pct) {
+  const r = 17, around = 2 * Math.PI * r;
+  const shown = pct < 5 ? 0.04 : pct / 100;        // a sliver for "<5%"
+  const wrap = el("div", "ring");
+  wrap.innerHTML =
+    `<svg viewBox="0 0 44 44" aria-hidden="true">` +
+    `<circle cx="22" cy="22" r="${r}" class="ring-track"/>` +
+    `<circle cx="22" cy="22" r="${r}" class="ring-arc" stroke-dasharray="${(shown * around).toFixed(1)} ${around.toFixed(1)}"/>` +
+    `</svg>`;
+  wrap.append(el("span", "ring-text", pct < 5 ? "<5%" : `${pct}%`));
+  wrap.setAttribute("aria-label", `${pct < 5 ? "under 5" : pct}% chance of 10 mm or more`);
+  return wrap;
+}
+
 function icon(condition) {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("viewBox", "0 0 48 48");
@@ -930,34 +945,51 @@ function fillPanel(point, message) {
     card.type = "button";
     // dayName gives "Tuesday 24 Nov": the card shows "Today" / "Tue 24 Nov", or "Wed" / "25 Nov".
     const [weekday, ...date] = dayName(day.key).split(" ");
-    card.append(el("div", "card-day", i === 0 ? "Today" : weekday.slice(0, 3)));
-    card.append(el("div", "card-date", i === 0 ? `${weekday.slice(0, 3)} ${date.join(" ")}` : date.join(" ")));
+    // Top: day and date on the left, the condition icon on the right.
+    const top = el("div", "card-top");
+    const when = el("div");
+    when.append(el("div", "card-day", i === 0 ? "Today" : weekday.slice(0, 3)));
+    when.append(el("div", "card-date", i === 0 ? `${weekday.slice(0, 3)} ${date.join(" ")}` : date.join(" ")));
+    top.append(when);
+    card.append(top);
     if (!s) {
       card.append(el("div", "card-empty", "Not yet available"));
       card.disabled = true;
     } else {
-      card.append(icon(s.condition));
-      card.append(el("div", "card-condition", s.condition));
+      top.append(icon(s.condition));
+      // Condition on the left, high / low on the right.
+      const line = el("div", "card-line");
+      line.append(el("div", "card-condition", s.condition));
+      const temps = el("div", "card-temps");
+      temps.innerHTML = `<b>${s.high}°C</b> / ${s.low}°C`;
+      line.append(temps);
+      card.append(line);
       // Keep the cards lined up: reserve the hazard line on every card if any has one.
       if (summaries.some((x) => x && x.hazards.length)) {
         card.append(el("div", "card-hazard", s.hazards.join(" · ")));
       }
-      const temps = el("div", "card-temps");
-      temps.innerHTML = `H <b>${s.high}°C</b>&nbsp;&nbsp;L <b>${s.low}°C</b>`;
-      card.append(temps);
-      card.append(el("div", "card-total", `${s.total === 0 ? "0" : s.total.toFixed(1)} mm`));
-      card.append(el("div", `pill ${s.intensity[2]}`, s.intensity[1]));
-      // "24 h from 1 AM": the hours the total covers (today can be shorter).
-      const hours = Math.round((s.to - s.from) / HOUR_MS);
-      card.append(el("div", "card-span", `${hours} h from ${formatTime(s.from, zone)}`));
+
+      // The inner box: rainfall on the left, chance of 10 mm+ on the right.
+      const box = el("div", "card-box");
+      const rain = el("div", "card-rain");
+      rain.append(el("div", "card-label", "Rainfall"));
+      const total = el("div", "card-total", s.total === 0 ? "0" : s.total.toFixed(1));
+      total.append(el("span", "card-unit", "mm"));
+      rain.append(total, el("div", `pill ${s.intensity[2]}`, s.intensity[1]));
+      box.append(rain);
       if (s.chance) {
-        const chance = el("div", "chance");
-        chance.innerHTML = '<svg viewBox="0 0 12 16" class="drop" aria-hidden="true"><path d="M6 1C6 1 1 7.5 1 10.5a5 5 0 0 0 10 0C11 7.5 6 1 6 1z"/></svg>';
-        chance.append(` ${s.chance.pct < 5 ? "under 5" : s.chance.pct}%`);
-        card.append(chance);
-        card.append(el("div", "chance-label",
-          `chance of 10 mm+ · 24 h from ${chanceStart(s.chance.start, day.key, zone)}`));
+        const chance = el("div", "card-chance");
+        chance.append(el("div", "card-label", "10 mm+"), ring(s.chance.pct));
+        box.append(chance);
       }
+      card.append(box);
+
+      // One small line: the hours the total covers (today can be shorter),
+      // and the 24-hour window the chance is for.
+      const hours = Math.round((s.to - s.from) / HOUR_MS);
+      let note = `Rain: ${hours} h from ${formatTime(s.from, zone)}`;
+      if (s.chance) note += ` · 10 mm+: 24 h from ${chanceStart(s.chance.start, day.key, zone)}`;
+      card.append(el("div", "card-note", note));
       card.addEventListener("click", () => { shownDay = i; fillPanel(point, ""); });
     }
     cards.append(card);
@@ -973,7 +1005,7 @@ function fillPanel(point, message) {
   const bars = el("div", "bars");
   for (const b of day.blocks) {
     const column = el("div", "slot" + (b.isNow ? " now" : ""));
-    column.append(el("div", "slot-start", b.isNow ? "Now" : formatTime(b.start, zone)));
+    column.append(el("div", "slot-now", b.isNow ? "Now" : ""));
     column.append(el("div", "slot-amount", formatMm(b.mm)));
     const track = el("div", "slot-track");
     const bar = el("div", "slot-bar");
@@ -983,7 +1015,7 @@ function fillPanel(point, message) {
     }
     track.append(bar);
     column.append(track);
-    column.append(el("div", "slot-end", `to ${formatTime(blockStart(b.k + 1), zone)}`));
+    column.append(el("div", "slot-start", formatTime(b.start, zone)));   // block start only
     bars.append(column);
   }
   timeline.append(bars);
@@ -1032,7 +1064,10 @@ async function startRain() {
   if (!meta.pictures) return;
   // Older data has no type pictures: keep to the rain amount map.
   if (!typeInfo()) mapMode = "amount";
-  else modeSwitch.hidden = false;
+  else {
+    paintModeIcons();
+    modeSwitch.hidden = false;
+  }
   setMapMode(mapMode);
   setInterval(showRainForNow, 60 * 1000);     // move on when the next block begins
 }
@@ -1067,7 +1102,7 @@ function showRainForNow() {
     }, above ? above.id : undefined);
   }
   // The map covers the whole globe, so its times are in the viewer's own zone.
-  legendWhen.textContent = `${mapMode === "type" ? "Rain type" : "Rain"}, ` +
+  legendWhen.textContent = `${mapMode === "type" ? "Precipitation type" : "Precipitation"}, ` +
     `${formatTime(blockStart(k))} to ${formatTime(blockStart(k + 1))}`;
 }
 
@@ -1118,4 +1153,16 @@ function setMapMode(mode) {
 
 for (const button of modeSwitch.querySelectorAll("button")) {
   button.addEventListener("click", () => setMapMode(button.dataset.mode));
+}
+
+// Each switch button's round icon: a colour wheel of that map's own colours
+// (from meta.json), so the icon always matches the map.
+function paintModeIcons() {
+  const wheel = (colours) => {
+    const slice = 360 / colours.length;
+    return `conic-gradient(${colours.map((c, i) => `${c} ${i * slice}deg ${(i + 1) * slice}deg`).join(", ")})`;
+  };
+  const icon = (mode) => modeSwitch.querySelector(`[data-mode="${mode}"] .mode-icon`);
+  icon("amount").style.background = wheel(rainInfo().colours.map((c) => c.colour));
+  icon("type").style.background = wheel(typeInfo().types.map((t) => t.colour));
 }

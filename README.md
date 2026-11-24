@@ -11,8 +11,8 @@ Built by Santosh Srinivas for the QUEST Lab (IISc) Full Stack AI pre-doctoral se
 When the app opens, the map is coloured wherever at least 1 mm of rain is forecast in the current 3-hour block. The legend in the bottom left shows the colour for each amount and the block's times.
 
 The switch on the right changes what the colours mean:
-- **Rain amount** colours by mm.
-- **Rain type** colours the same areas by what falls: Rain, Rain and snow, Snow, Freezing rain or Ice pellets.
+- **Precipitation amount** colours by mm.
+- **Precipitation type** colours the same areas by what falls: Rain, Rain and snow, Snow, Freezing rain or Ice pellets.
 
 The page remembers your choice. Search, the summary box and the panel work the same in both.
 
@@ -21,11 +21,11 @@ The map shows one level of place names at a time: continents and oceans when zoo
 1. Pick a place by clicking the map, clicking a city or town name (this opens the 4-day panel straight away), or typing a name in the search bar and choosing a suggestion. Choosing a continent, country or state only moves the map there, since a forecast is for one point.
 2. A white dot marks the place. A small box beside it shows the amount for the current 3-hour block and whether it falls as rain, snow, or rain and snow (or "No rain"), using the same snow share as the day cards. It adds "Freezing rain possible" or "Ice pellets possible" when the model shows them at the end of the block.
 3. Press **4-day forecast** in the box. A panel opens at the bottom with four day cards, today and the next three days, in the place's own time zone. Each card shows:
-   - a condition word and icon (Dry, Mostly dry, Showers, Rain, Thunderstorms likely, Snow, or Rain and snow), plus "Freezing rain at times" or "Ice pellets at times" when the model shows them
+   - a condition word and icon (Dry, Mostly dry, Showers, Rain, Storms likely, Snow, or Rain and snow), plus "Freezing rain at times" or "Ice pellets at times" when the model shows them
    - the day's high and low temperature
    - the day's total rain and its intensity, using India Meteorological Department categories
    - the ensemble's chance of 10 mm or more in the 24 hours that best match the day
-4. Below the cards, the selected day's rain is shown as one bar per 3-hour block, coloured like the map. Press another card to see that day.
+4. Below the cards, the selected day's rain is shown as one bar per 3-hour block, coloured like the map and labelled with the time the block starts. Press another card to see that day.
 5. Press the cross on the box or the panel to clear the selection. The map stays where it is.
 
 Picking another place while the panel is open updates the panel.
@@ -119,7 +119,7 @@ docs/                           planning documents
 - **Map colours start at 1 mm.** Lighter rain is not coloured on the map, so that the land stays visible. The summary box and the panel still show it. Colours are smoothed between grid points, so at the edge of a coloured area the colour can differ slightly from the number in the summary box.
 - **About 25 km resolution.** The value is for the nearest grid point, which can be up to about 18 km from the picked spot. Single-point values in intense storms can be erratic.
 - **The forecast is 7 to 14 hours old when you see it.** ECMWF publishes each run about 7 hours after it starts. The panel shows when the forecast in use was issued.
-- **Card conditions are worked out, not forecast directly.** They come from the day's summed amounts: Snow when snowfall is at least 80% of the total, Rain and snow when it is over 20%, Showers when at least half the rain is showery. ECMWF open data has no thunderstorm field: "Thunderstorms likely" means the day has at least 5 mm of rain, at least half of it showery, and storm energy of at least 1000 J/kg. The freezing rain and ice pellet lines come from the precipitation type at the end of each 3-hour block only, so they say "at times".
+- **Card conditions are worked out, not forecast directly.** They come from the day's summed amounts: Snow when snowfall is at least 80% of the total, Rain and snow when it is over 20%, Showers when at least half the rain is showery. ECMWF open data has no thunderstorm field: "Storms likely" means the day has at least 5 mm of rain, at least half of it showery, and storm energy of at least 1000 J/kg. The freezing rain and ice pellet lines come from the precipitation type at the end of each 3-hour block only, so they say "at times".
 - **The chance of 10 mm+ can come from an older run, over a slightly different 24 hours.** ECMWF publishes these probabilities only from its 00 and 12 UTC runs, for 24-hour windows starting every 12 hours.
 - Each card uses the window that covers most of its day. When two windows cover the same number of hours, it uses the one that starts within that day.
 - Each card names its window's start, with the weekday if it starts on another day.

@@ -8,7 +8,7 @@
 
   <!-- MapLibre: the map library -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.min.css">
-  <link rel="stylesheet" href="style.css?v=13">
+  <link rel="stylesheet" href="style.css?v=16">
 </head>
 <body>
 
@@ -32,10 +32,14 @@
   <!-- The app's name, top right -->
   <div id="brand">Varsha</div>
 
-  <!-- Which map: colour by rain amount, or by rain type -->
+  <!-- Which map: colour by precipitation amount, or by precipitation type -->
   <div id="mode" role="group" aria-label="Map colours" hidden>
-    <button type="button" data-mode="amount" aria-pressed="true">Rain amount</button>
-    <button type="button" data-mode="type" aria-pressed="false">Rain type</button>
+    <button type="button" data-mode="amount" aria-pressed="true">
+      <span class="mode-label">Precipitation amount</span><span class="mode-icon" aria-hidden="true"></span>
+    </button>
+    <button type="button" data-mode="type" aria-pressed="false">
+      <span class="mode-label">Precipitation type</span><span class="mode-icon" aria-hidden="true"></span>
+    </button>
   </div>
 
   <!-- Colour key for the rain shown on the map, bottom left -->
@@ -61,6 +65,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.min.js"></script>
   <!-- tz-lookup: finds a place's time zone from its latitude and longitude -->
   <script src="https://cdn.jsdelivr.net/npm/tz-lookup@6.1.25/tz.js"></script>
-  <script src="app.js?v=13"></script>
+  <script src="app.js?v=15"></script>
 </body>
 </html>
