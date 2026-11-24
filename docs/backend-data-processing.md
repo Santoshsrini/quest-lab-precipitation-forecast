@@ -215,7 +215,10 @@ The bottom panel's day cards need more than rain. The script downloads these too
 - Condition, in order: under 0.2 mm Dry; under 1 mm Mostly dry; snow share at least 80% → Snow; snow share over 20% → Rain and snow; any storm block, at least half showery and at least 5 mm → Thunderstorms likely; at least half showery → Showers; otherwise Rain.
 - Extra line: "Freezing rain at times" or "Ice pellets at times" if any block with at least 0.1 mm shows that `ptype` at its end. These are snapshots, so they say "at times".
 - High and low: highest `tmax` and lowest `tmin`.
-- Chance of 10 mm+: the `p10` window that overlaps the day the most, shown with its start time.
+- Chance of 10 mm+: the `p10` window that overlaps the day the most. The day is the span of its blocks, e.g. 1 AM to 1 AM at UTC+7.
+  - On a tie, the window that starts within the day wins.
+  - It is shown with its start time, plus the weekday if that is another day.
+  - The card's total line reads "24 h from 1 AM" (fewer hours for a shorter today).
 
 **Checks added:** all seven fields in every tile; showery rain and snowfall not negative and not above total rain beyond precision; temperatures plausible; high not more than 1 °C below low (rounding of two separately stored fields, seen in 0.19% of blocks); weather codes 0 to 5; chances 0 to 100%; ensemble run is 00 or 12 UTC and not newer than the main run; today plus 3 days lies inside the ensemble windows for every time zone.
 

@@ -777,11 +777,23 @@ function bestWindow(point, from, to) {
   meta.prob_windows.forEach(([a, b], i) => {
     const ws = runStart + a * HOUR_MS, we = runStart + b * HOUR_MS;
     const overlap = Math.min(we, to) - Math.max(ws, from);
-    if (overlap > 0 && (!best || overlap > best.overlap)) {
-      best = { overlap, pct: point.p10[i], start: new Date(ws) };
+    if (overlap <= 0) return;
+    // On a tie, prefer the window that starts within the card's day, so the
+    // card isn't labelled with a window that began the day before.
+    const startsInDay = ws >= from && ws < to;
+    if (!best || overlap > best.overlap || (overlap === best.overlap && startsInDay && !best.startsInDay)) {
+      best = { overlap, startsInDay, pct: point.p10[i], start: new Date(ws) };
     }
   });
   return best;
+}
+
+// The chance window's start, as "7 AM", or "Mon 7 PM" when it starts on a
+// different local day from the card's own day.
+function chanceStart(start, cardDayKey, zone) {
+  const time = formatTime(start, zone);
+  if (dayKey(start, zone) === cardDayKey) return time;
+  return `${dayName(dayKey(start, zone)).slice(0, 3)} ${time}`;
 }
 
 // Rain, snow, or both, from the share of the total that falls as snow.
@@ -935,14 +947,16 @@ function fillPanel(point, message) {
       card.append(temps);
       card.append(el("div", "card-total", `${s.total === 0 ? "0" : s.total.toFixed(1)} mm`));
       card.append(el("div", `pill ${s.intensity[2]}`, s.intensity[1]));
-      card.append(el("div", "card-span", `${formatTime(s.from, zone)} to ${formatTime(s.to, zone)}`));
+      // "24 h from 1 AM": the hours the total covers (today can be shorter).
+      const hours = Math.round((s.to - s.from) / HOUR_MS);
+      card.append(el("div", "card-span", `${hours} h from ${formatTime(s.from, zone)}`));
       if (s.chance) {
         const chance = el("div", "chance");
         chance.innerHTML = '<svg viewBox="0 0 12 16" class="drop" aria-hidden="true"><path d="M6 1C6 1 1 7.5 1 10.5a5 5 0 0 0 10 0C11 7.5 6 1 6 1z"/></svg>';
         chance.append(` ${s.chance.pct < 5 ? "under 5" : s.chance.pct}%`);
         card.append(chance);
         card.append(el("div", "chance-label",
-          `chance of 10 mm+ · 24 h from ${formatTime(s.chance.start, zone)}`));
+          `chance of 10 mm+ · 24 h from ${chanceStart(s.chance.start, day.key, zone)}`));
       }
       card.addEventListener("click", () => { shownDay = i; fillPanel(point, ""); });
     }

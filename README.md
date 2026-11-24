@@ -112,7 +112,7 @@ docs/                           planning documents
 ## Known limits
 
 - **3-hour blocks, not hourly.** ECMWF Open Data gives precipitation every 3 hours. The app shows those blocks as they are and does not invent hourly values.
-- **Blocks sit on UTC boundaries.** In India they run 11:30 PM to 2:30 AM, 2:30 to 5:30 AM and so on. Each day in the panel begins with the block that contains 12 AM.
+- **Blocks sit on UTC boundaries.** In India they run 11:30 PM to 2:30 AM, 2:30 to 5:30 AM and so on. Each day in the panel holds the blocks that start between 12 AM and 12 AM local time. So the day can run, for example, from 2:30 AM to 2:30 AM, and the card says "24 h from 2:30 AM".
 - **Today can have fewer than 8 bars.** The panel shows the selected place's today plus 3 days, in the place's own time zone, from the latest forecast run. A run has no values before its own start, so today begins at the first block the run covers. Those missing blocks are always in the past.
 - **The map legend's times are in the viewer's own time zone,** because the map covers the whole globe. The summary box and the panel use the selected place's time zone.
 - **Precision gets coarser further ahead.** The source files store totals with limited precision, about 0.06 mm early in the forecast and about 0.5 mm by day four. Amounts below the precision are shown as zero, so very light rain may not appear on later days.
@@ -120,7 +120,10 @@ docs/                           planning documents
 - **About 25 km resolution.** The value is for the nearest grid point, which can be up to about 18 km from the picked spot. Single-point values in intense storms can be erratic.
 - **The forecast is 7 to 14 hours old when you see it.** ECMWF publishes each run about 7 hours after it starts. The panel shows when the forecast in use was issued.
 - **Card conditions are worked out, not forecast directly.** They come from the day's summed amounts: Snow when snowfall is at least 80% of the total, Rain and snow when it is over 20%, Showers when at least half the rain is showery. ECMWF open data has no thunderstorm field: "Thunderstorms likely" means the day has at least 5 mm of rain, at least half of it showery, and storm energy of at least 1000 J/kg. The freezing rain and ice pellet lines come from the precipitation type at the end of each 3-hour block only, so they say "at times".
-- **The chance of 10 mm+ can come from an older run, over a slightly different 24 hours.** ECMWF publishes these probabilities only from its 00 and 12 UTC runs, for 24-hour windows starting every 12 hours. Each card names its window, and the panel names both runs.
+- **The chance of 10 mm+ can come from an older run, over a slightly different 24 hours.** ECMWF publishes these probabilities only from its 00 and 12 UTC runs, for 24-hour windows starting every 12 hours.
+- Each card uses the window that covers most of its day. When two windows cover the same number of hours, it uses the one that starts within that day.
+- Each card names its window's start, with the weekday if it starts on another day.
+- The panel names both runs.
 - **Scheduled updates can pause.** GitHub stops scheduled jobs in a repository with no activity for 60 days. The job can be restarted from the Actions tab.
 
 ## Data and credits
