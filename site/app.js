@@ -55,6 +55,7 @@ async function startMap() {
       layer.paint["text-halo-width"] = 1.2;
     }
   }
+  setLabelLevels(style);
 
   map = new maplibregl.Map({
     container: "map",
@@ -80,7 +81,86 @@ async function startMap() {
   map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
 
   map.on("click", onMapClick);
+  map.on("mousemove", (event) => {                // a hand over city and town names
+    map.getCanvas().style.cursor = labelAt(event.point) ? "pointer" : "";
+  });
   map.on("load", startRain);      // colour the map once it has been drawn
+}
+
+// Place names, one level at a time as you zoom in:
+//   zoom 1.5 to 3     continents and oceans
+//   zoom 3 to 5.5     countries, oceans and seas
+//   zoom 5.5 to 7.5   cities
+//   zoom 7.5 and in   cities and towns (villages from 9)
+// State names, suburbs and road names are never shown.
+const LEVEL = { country: 3, city: 5.5, town: 7.5, village: 9 };
+const CONTINENTS = ["Africa", "Antarctica", "Asia", "Europe", "North America", "South America", "Oceania"];
+const NAME = ["coalesce", ["get", "name_en"], ["get", "name:latin"], ["get", "name"]];
+const CLICKABLE = ["place_city_large", "place_city", "place_town", "place_village"];
+
+function setLabelLevels(style) {
+  const levels = {
+    // id: [from zoom, up to zoom, text size, capitals?, letter spacing]
+    place_country_major: [LEVEL.country, LEVEL.city, ["interpolate", ["linear"], ["zoom"], 3, 12, 5.5, 15], true, 0.2],
+    place_country_minor: [LEVEL.country, LEVEL.city, ["interpolate", ["linear"], ["zoom"], 3, 10, 5.5, 13], true, 0.15],
+    place_country_other: [LEVEL.country, LEVEL.city, ["interpolate", ["linear"], ["zoom"], 3, 9, 5.5, 12], true, 0.15],
+    place_city_large: [LEVEL.city, 24, ["interpolate", ["linear"], ["zoom"], 5.5, 13, 9, 15], false, 0],
+    place_city: [LEVEL.city, 24, ["interpolate", ["linear"], ["zoom"], 5.5, 11, 9, 13], false, 0],
+    place_town: [LEVEL.town, 24, ["interpolate", ["linear"], ["zoom"], 7.5, 11, 10, 12], false, 0],
+    place_village: [LEVEL.village, 24, 10.5, false, 0],
+  };
+  const hidden = ["place_state", "place_other", "place_suburb", "highway_name_other",
+                  "highway_name_motorway", "road_oneway", "road_oneway_opposite"];
+
+  for (const layer of style.layers) {
+    const level = levels[layer.id];
+    if (level) {
+      const [from, to, size, capitals, spacing] = level;
+      layer.minzoom = from;
+      layer.maxzoom = to;
+      layer.layout["text-size"] = size;
+      layer.layout["text-transform"] = capitals ? "uppercase" : "none";
+      layer.layout["text-letter-spacing"] = spacing;
+      if (capitals) layer.paint["text-opacity"] = 0.75;    // countries a little faded
+    } else if (hidden.includes(layer.id)) {
+      layer.layout.visibility = "none";
+    } else if (layer.id === "water_name") {
+      layer.minzoom = LEVEL.town;                            // river names only when close
+    }
+  }
+
+  // Continent, ocean and sea names: in OpenFreeMap's data but not drawn by
+  // its style, so add them here.
+  const paint = { "text-color": LABEL, "text-halo-color": "rgba(40, 42, 45, 0.85)", "text-halo-width": 1.2 };
+  const point = ["match", ["geometry-type"], ["Point", "MultiPoint"], true, false];
+  style.layers.push(
+    {
+      id: "continent_name", type: "symbol", source: "openmaptiles", "source-layer": "place",
+      maxzoom: LEVEL.country,
+      filter: ["all", point, ["==", ["get", "class"], "continent"], ["in", NAME, ["literal", CONTINENTS]]],
+      layout: { "text-field": NAME, "text-font": ["Noto Sans Regular"], "text-size": 14,
+                "text-transform": "uppercase", "text-letter-spacing": 0.4 },
+      paint: { ...paint, "text-opacity": 0.85 },
+    },
+    {
+      id: "ocean_name", type: "symbol", source: "openmaptiles", "source-layer": "water_name",
+      maxzoom: LEVEL.city,
+      // The data files oceans as seas, so pick them by name.
+      filter: ["all", point, ["in", "Ocean", NAME]],
+      layout: { "text-field": NAME, "text-font": ["Noto Sans Italic"], "text-size": 13,
+                "text-letter-spacing": 0.25, "text-max-width": 8 },
+      paint: { ...paint, "text-opacity": 0.75 },
+    },
+    {
+      id: "sea_name", type: "symbol", source: "openmaptiles", "source-layer": "water_name",
+      minzoom: LEVEL.country, maxzoom: LEVEL.town,
+      filter: ["all", point, ["!", ["in", "Ocean", NAME]],
+               ["match", ["get", "class"], ["sea", "bay", "gulf", "strait"], true, false]],
+      layout: { "text-field": NAME, "text-font": ["Noto Sans Italic"], "text-size": 11,
+                "text-letter-spacing": 0.1, "text-max-width": 8 },
+      paint: { ...paint, "text-opacity": 0.7 },
+    },
+  );
 }
 
 startMap();
@@ -134,7 +214,32 @@ function formatCoordinates(lat, lon) {
 
 // ------------------------------------------------------- clicking the map
 
+// The city or town name drawn under a point on the screen, or undefined.
+function labelAt(point) {
+  const box = [[point.x - 4, point.y - 4], [point.x + 4, point.y + 4]];
+  return map.queryRenderedFeatures(box, { layers: CLICKABLE })[0];
+}
+
 async function onMapClick(event) {
+  // Clicking a city or town name: forecast for that place, straight in the panel.
+  const label = labelAt(event.point);
+  if (label) {
+    const [lon, lat] = label.geometry.coordinates;
+    const name = label.properties.name_en || label.properties["name:latin"] || label.properties.name;
+    panelOpen = true;
+    shownDay = 0;
+    select(lat, lon, name);
+    const thisPick = pickNumber;
+    // Add the state and country ("Chennai, Tamil Nadu, India") when known.
+    const place = await findPlace(lat, lon);
+    if (place && place.region && thisPick === pickNumber) {
+      selected.name = `${name}, ${place.region}`;
+      input.value = selected.name;
+      showNames();
+    }
+    return;
+  }
+
   // wrap() brings the longitude back into -180 to 180 after dragging round the globe
   const { lat, lng: lon } = event.lngLat.wrap();
 
@@ -142,24 +247,25 @@ async function onMapClick(event) {
   select(lat, lon, formatCoordinates(lat, lon));
   const thisPick = pickNumber;
 
-  const name = await findPlaceName(lat, lon);
-  if (name && thisPick === pickNumber) {
-    selected.name = name;
-    input.value = name;
+  const place = await findPlace(lat, lon);
+  if (place && thisPick === pickNumber) {
+    selected.name = place.full;
+    input.value = place.full;
     showNames();
   }
 }
 
-// Ask Photon for the nearest town or city, within 50 km. Returns "" if none.
-async function findPlaceName(lat, lon) {
+// Ask Photon for the nearest town or city, within 50 km: describe()'s
+// { place, region, full }, or null if none.
+async function findPlace(lat, lon) {
   const url = `${PHOTON}/reverse?lat=${lat}&lon=${lon}&lang=en&radius=50` +
               "&layer=city&layer=county&layer=state";
   try {
     const response = await fetch(url);
     const place = (await response.json()).features[0];
-    return place ? describe(place.properties).full : "";
+    return place ? describe(place.properties) : null;
   } catch (error) {
-    return "";                // no network, or Photon is down: keep the coordinates
+    return null;              // no network, or Photon is down: keep what we have
   }
 }
 
@@ -174,6 +280,19 @@ function describe(p) {
 }
 
 // ---------------------------------------------------------- the search bar
+
+// Search results that only move the map, with no forecast.
+const WIDE_AREAS = ["continent", "country", "state"];
+// The continents, for search: [west, north, east, south].
+const CONTINENT_VIEWS = [
+  { name: "Africa", extent: [-18, 37, 52, -35] },
+  { name: "Antarctica", extent: [-180, -60, 180, -85] },
+  { name: "Asia", extent: [26, 75, 150, -10] },
+  { name: "Europe", extent: [-25, 71, 45, 35] },
+  { name: "North America", extent: [-168, 72, -52, 7] },
+  { name: "South America", extent: [-82, 13, -34, -56] },
+  { name: "Oceania", extent: [110, 0, 180, -48] },
+];
 
 let typingTimer = null;
 let suggestions = [];         // the places now listed
@@ -218,10 +337,18 @@ async function search(text) {
       type: p.type,
       lat: feature.geometry.coordinates[1],
       lon: feature.geometry.coordinates[0],
+      extent: p.extent,             // [west, north, east, south], for countries and states
       // The district or county, if it says more than the place's own name.
       area: [p.district, p.county].find((a) => a && a !== s.place && !s.region.includes(a)) || "",
     };
   });
+  // Continents first: Photon doesn't know them.
+  const typed = text.toLowerCase();
+  const continents = CONTINENT_VIEWS
+    .filter((c) => c.name.toLowerCase().startsWith(typed))
+    .map((c) => ({ place: c.name, region: "Continent", full: c.name, type: "continent",
+                   extent: c.extent, area: "" }));
+  suggestions = [...continents, ...suggestions.filter((s) => !continents.some((c) => c.place === s.place))];
   if (suggestions.length === 0) {
     showNote("No place found with that name.");
     return;
@@ -283,10 +410,25 @@ function hideSuggestions() {
 function choose(index) {
   const s = suggestions[index];
   if (!s) return;
-  // Zoom in further for a town than for a whole country.
-  const zoom = { country: 4, state: 6, county: 8 }[s.type] || 9;
+  if (WIDE_AREAS.includes(s.type)) {
+    // A continent, country or state is too big for one point's forecast:
+    // just show it on the map.
+    clearSelection();
+    input.value = s.full;
+    clearButton.hidden = false;
+    if (s.extent) {
+      const [west, north, east, south] = s.extent;
+      map.fitBounds([[west, south], [east, north]], { padding: 40, maxZoom: 6.5 });
+    } else {
+      map.flyTo({ center: [s.lon, s.lat], zoom: s.type === "state" ? 5.5 : 4 });
+    }
+    input.blur();
+    return;
+  }
   select(s.lat, s.lon, s.full);
-  map.flyTo({ center: [s.lon, s.lat], zoom });
+  // With the panel open, land the place in the strip of map above it.
+  map.flyTo({ center: [s.lon, s.lat], zoom: s.type === "county" ? 8 : 9,
+              offset: panelOpen ? stripOffset() : [0, 0] });
   input.blur();
 }
 
@@ -719,9 +861,34 @@ function utcText(iso) {
     ", " + d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" }) + " UTC";
 }
 
+// The strip of map left visible above the open panel and below the search bar.
+const SEARCH_BAR_BOTTOM = 70;
+function visibleStrip() {
+  return { top: SEARCH_BAR_BOTTOM, bottom: panel.getBoundingClientRect().top };
+}
+
+// Where to centre the map so that [lon, lat] sits in the middle of the
+// visible strip: the offset is from the map's centre, in pixels.
+function stripOffset() {
+  const { top, bottom } = visibleStrip();
+  return [0, (top + bottom) / 2 - map.getContainer().clientHeight / 2];
+}
+
+// If the picked place is hidden behind the panel or the search bar, slide
+// the map so it shows in the strip above the panel. The zoom stays the same.
+function keepInView() {
+  if (!selected || panel.hidden || map.isMoving()) return;
+  const { top, bottom } = visibleStrip();
+  const y = map.project([selected.lon, selected.lat]).y;
+  if (y < top + 20 || y > bottom - 20) {
+    map.easeTo({ center: [selected.lon, selected.lat], offset: stripOffset(), duration: 500 });
+  }
+}
+
 function fillPanel(point, message) {
   panel.hidden = false;
   document.body.classList.add("panel-open");
+  keepInView();
   panelTitle.textContent = selected.name;
   panelPlace.textContent = meta ? placeDescription(selected.lat, selected.lon)
                                 : `Picked ${formatCoordinates(selected.lat, selected.lon)}`;

@@ -430,7 +430,8 @@ body.panel-open .maplibregl-ctrl-bottom-left {
 
 /* the panel covers most of the screen, so the map's key and zoom buttons step aside */
 body.panel-open #legend,
-body.panel-open .maplibregl-ctrl-group { display: none; }
+body.panel-open .maplibregl-ctrl-group,
+body.panel-open .maplibregl-ctrl-attrib { display: none; }
 
 /* ---------- narrow screens (phones) ---------- */
 

@@ -10,7 +10,9 @@ Built by Santosh Srinivas for the QUEST Lab (IISc) Full Stack AI pre-doctoral se
 
 When the app opens, the map is coloured wherever at least 1 mm of rain is forecast in the current 3-hour block. The legend in the bottom left shows the colour for each amount and the block's times.
 
-1. Pick a place by clicking the map, or by typing a name in the search bar and choosing a suggestion.
+The map shows one level of place names at a time: continents and oceans when zoomed out, then countries and seas, then cities, then towns.
+
+1. Pick a place by clicking the map, clicking a city or town name (this opens the 4-day panel straight away), or typing a name in the search bar and choosing a suggestion. Choosing a continent, country or state only moves the map there, since a forecast is for one point.
 2. A white dot marks the place. A small box beside it shows the amount for the current 3-hour block and whether it falls as rain, snow, or rain and snow (or "No rain"), using the same snow share as the day cards. It adds "Freezing rain possible" or "Ice pellets possible" when the model shows them at the end of the block.
 3. Press **4-day forecast** in the box. A panel opens at the bottom with four day cards, today and the next three days, in the place's own time zone. Each card shows:
    - a condition word and icon (Dry, Mostly dry, Showers, Rain, Thunderstorms likely, Snow, or Rain and snow), plus "Freezing rain at times" or "Ice pellets at times" when the model shows them

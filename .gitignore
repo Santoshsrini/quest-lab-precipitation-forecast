@@ -2,8 +2,9 @@
 site/data/
 pipeline/downloads/
 
-# Reference screenshots of another site
+# Reference screenshots and stylesheet of another site (for inspiration only)
 docs/screenshots/
+docs/references/
 
 # Python
 .venv/
