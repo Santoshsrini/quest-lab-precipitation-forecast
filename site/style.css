@@ -165,6 +165,34 @@ html, body {
   pointer-events: none;        /* clicks pass through to the map */
 }
 
+/* ---------- switch between the two maps (rain amount / rain type) ---------- */
+
+#mode {
+  position: fixed;
+  top: calc(var(--gap) + 56px + env(safe-area-inset-top, 0px));
+  right: calc(var(--gap) + env(safe-area-inset-right, 0px));
+  z-index: 999;                /* below the search suggestions on a phone */
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+#mode[hidden] { display: none; }
+#mode button {
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(30, 32, 34, 0.78);
+  color: #e3e7ec;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: right;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+#mode button:hover { background: rgba(30, 32, 34, 0.92); }
+#mode button[aria-pressed="true"] { background: #fff; color: #1f2328; }
+
 /* ---------- summary box (attached to the white dot) ---------- */
 
 .maplibregl-popup-content {
@@ -427,8 +455,13 @@ body.panel-open .maplibregl-ctrl-bottom-left {
 .legend-step:last-child .legend-swatch { border-radius: 0 4px 4px 0; }
 .legend-number { margin-top: 2px; font-size: 10px; color: #d5dae0; }
 #legend-unit { margin-top: 2px; font-size: 10px; color: #aab2bb; }
+/* rain type key: a swatch and a name for each type */
+#legend-bar.types { flex-wrap: wrap; max-width: 250px; gap: 4px 12px; }
+.legend-type { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: #e3e7ec; }
+.legend-type i { width: 12px; height: 9px; border-radius: 3px; display: inline-block; }
 
 /* the panel covers most of the screen, so the map's key and zoom buttons step aside */
+body.panel-open #mode,
 body.panel-open #legend,
 body.panel-open .maplibregl-ctrl-group,
 body.panel-open .maplibregl-ctrl-attrib { display: none; }
@@ -453,6 +486,10 @@ body.panel-open .maplibregl-ctrl-attrib { display: none; }
     height: auto;
     font-size: 18px;
   }
+
+  /* the map switch sits under the search bar, side by side */
+  #mode { top: calc(var(--gap) + 56px + env(safe-area-inset-top, 0px)); flex-direction: row; }
+  #mode button { padding: 6px 12px; font-size: 12px; }
 
   /* fingers zoom by pinching, so the buttons are not needed */
   .maplibregl-ctrl-group { display: none; }

@@ -9,6 +9,7 @@ Run it with:   .venv/bin/python pipeline/fetch_forecast.py
 Output:        site/data/meta.json                              the runs, block times, parameters
                site/data/tiles/r00_c00.json.gz ... r17_c35.json.gz   (648 files)
                site/data/tp/pictures/b00.png ... b47.png        (48 rain pictures)
+               site/data/type/pictures/b00.png ... b47.png      (48 precipitation type pictures)
 
 Each tile holds every parameter for its 10 x 10 degree area: rain, the
 showery part of the rain, high and low temperature, a weather code, and
@@ -73,6 +74,21 @@ RAIN_COLOURS = [
 ]
 # Colours start at 1 mm. Starting lower painted about 40% of the globe
 # light blue and hid the land; at 1 mm about 8% is coloured.
+# Colours for the second map, by precipitation type, for blocks with at
+# least MAP_MIN_TENTHS of precipitation (the same areas as the rain map).
+#   Rain, Rain and snow, Snow: from the block's snowfall share, sf / tp
+#     (at least 80% snow, over 20%, or less), the page's precipType() rule.
+#   Freezing rain, Ice pellets: from ptype at the block's end (the wx
+#     hazard); they take priority over the share, since they are hazards.
+TYPE_COLOURS = [
+    ("Rain",          "#3f8fe0"),   # blue
+    ("Rain and snow", "#9a7ce6"),   # violet
+    ("Snow",          "#eef3fb"),   # near-white
+    ("Freezing rain", "#e0457b"),   # red-pink
+    ("Ice pellets",   "#f08c3a"),   # orange
+]
+TYPES = "type"                  # folder and meta.json id for the type pictures
+MAP_MIN_TENTHS = round(RAIN_COLOURS[0][0] * 10)    # 1 mm, as on the rain map
 PICTURE_SIZE = 1440             # pictures are 1440 x 1440 pixels
 MAP_EDGE_LAT = 85.0511          # the web map's projection stops at this latitude
 
@@ -434,6 +450,8 @@ def write_files(rain, precisions, run, card, prob_run):
     p = PARAMETERS[RAIN]
     write_tiles({RAIN: rain, **card}, new / "tiles")
     write_pictures(rain, new / RAIN / "pictures", p["colours"])
+    save_pictures((type_class(rain[b], card["sf"][b], card["wx"][b]) for b in range(BLOCKS)),
+                  new / TYPES / "pictures", TYPE_COLOURS)
 
     run_utc = run.replace(tzinfo=timezone.utc)
     utc = lambda t: t.replace(tzinfo=timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
@@ -480,6 +498,10 @@ def write_files(rain, precisions, run, card, prob_run):
              "hazards": ["none", "freezing rain or drizzle", "ice pellets"], "storm_cape": STORM_CAPE},
             {"id": "p10", "name": "Chance of 10 mm or more", "unit": "%", "per": "24 hours",
              "stored_as": "whole", "windows": "prob_windows", "run": "prob_run"},
+            # Pictures only: the precipitation type map, worked out from tp, sf and wx.
+            {"id": TYPES, "name": "Precipitation type", "per": "3 hours",
+             "pictures": f"{TYPES}/pictures", "from_mm": MAP_MIN_TENTHS / 10,
+             "types": [{"name": name, "colour": colour} for name, colour in TYPE_COLOURS]},
         ],
     }
     with open(new / "meta.json", "w") as f:
@@ -515,8 +537,29 @@ def colour_class(tenths, colours=RAIN_COLOURS):
     return np.digitize(tenths, starts).astype(np.uint8)
 
 
+def type_class(rain, sf, wx):
+    """Precipitation type for each grid point of one block, as a colour
+    number: 0 = none (under 1 mm), then 1 to 5 in TYPE_COLOURS order.
+    All inputs are in tenths of a mm, or the wx code."""
+    rain = rain.astype(np.int32)
+    sf = sf.astype(np.int32)
+    classes = np.ones(rain.shape, dtype=np.uint8)           # Rain
+    classes[5 * sf > rain] = 2                               # snow share over 20%
+    classes[5 * sf >= 4 * rain] = 3                          # snow share at least 80%
+    hazard = wx >> 1
+    classes[hazard == 1] = 4                                 # freezing rain or drizzle
+    classes[hazard == 2] = 5                                 # ice pellets
+    classes[rain < MAP_MIN_TENTHS] = 0
+    return classes
+
+
 def write_pictures(values, folder, colours):
-    """Save one picture of the globe per block: b00.png, b01.png, ..."""
+    """Save one rain picture of the globe per block: b00.png, b01.png, ..."""
+    save_pictures([colour_class(v, colours) for v in values], folder, colours)
+
+
+def save_pictures(class_grids, folder, colours):
+    """Save one picture per block from grids of colour numbers (0 = none)."""
     folder.mkdir(parents=True)
     rows = picture_rows()
 
@@ -525,9 +568,8 @@ def write_pictures(values, folder, colours):
     for _, colour in colours:
         palette += [int(colour[i:i + 2], 16) for i in (1, 3, 5)]
 
-    for block in range(values.shape[0]):
-        classes = colour_class(values[block], colours)[rows, :]    # 1440 x 1440
-        picture = Image.fromarray(classes, mode="P")
+    for block, classes in enumerate(class_grids):
+        picture = Image.fromarray(classes[rows, :], mode="P")      # 1440 x 1440
         picture.putpalette(palette)
         picture.save(folder / f"b{block:02d}.png", transparency=0, optimize=True)
 
@@ -576,6 +618,9 @@ def main():
     pictures = list((DATA / RAIN / "pictures").glob("*.png"))
     picture_kb = sum(p.stat().st_size for p in pictures) / 1e3 / len(pictures)
     print(f"Saved {len(pictures)} rain pictures, about {picture_kb:.0f} KB each")
+    pictures = list((DATA / TYPES / "pictures").glob("*.png"))
+    picture_kb = sum(p.stat().st_size for p in pictures) / 1e3 / len(pictures)
+    print(f"Saved {len(pictures)} precipitation type pictures, about {picture_kb:.0f} KB each")
 
     print_forecast("Bengaluru", 12.97, 77.59, run)
     print(f"\nDone in {time.time() - started:.0f} seconds.")

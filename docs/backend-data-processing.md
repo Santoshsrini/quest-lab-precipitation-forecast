@@ -254,6 +254,23 @@ The value shown is the forecast for the grid point nearest to the picked spot. T
 
 The page downloads `r07_c25.json`, which covers 20°N to 10.25°N and 70°E to 79.75°E, and reads entry 1150 of its `values` list. The grid point used is 13.00°N, 77.50°E, about 10 km from the picked spot.
 
+## Precipitation type pictures (added 24 Nov 2026)
+
+For the second map ("Rain type"), the script saves `site/data/type/pictures/b00.png … b47.png`. They have the same size, projection and area as the rain pictures, and the same 1 mm threshold. Each pixel's colour number is worked out from the tile values of that block:
+
+| Colour number | Type | Rule, checked in this order |
+|---|---|---|
+| 0 | none (transparent) | `tp` under 1 mm |
+| 4 | Freezing rain | `wx` hazard 1 (`ptype` 3 or 12 at the block's end) |
+| 5 | Ice pellets | `wx` hazard 2 (`ptype` 8 at the block's end) |
+| 3 | Snow | `sf` at least 80% of `tp` |
+| 2 | Rain and snow | `sf` over 20% of `tp` |
+| 1 | Rain | otherwise |
+
+`meta.json` lists the types and their colours under the parameter `type`, so the page's legend always matches the pictures.
+
+**Check:** `check_output.py` reads `tp`, `sf` and `wx` from the tiles for 5,000 random points, plus a sample of wet points so every type is tested. It works out the type with its own copy of the rule and compares it with the picture's pixel.
+
 ## Local time
 
 The panel shows times in the selected place's local time. This changes nothing in the back end.

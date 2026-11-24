@@ -10,6 +10,12 @@ Built by Santosh Srinivas for the QUEST Lab (IISc) Full Stack AI pre-doctoral se
 
 When the app opens, the map is coloured wherever at least 1 mm of rain is forecast in the current 3-hour block. The legend in the bottom left shows the colour for each amount and the block's times.
 
+The switch on the right changes what the colours mean:
+- **Rain amount** colours by mm.
+- **Rain type** colours the same areas by what falls: Rain, Rain and snow, Snow, Freezing rain or Ice pellets.
+
+The page remembers your choice. Search, the summary box and the panel work the same in both.
+
 The map shows one level of place names at a time: continents and oceans when zoomed out, then countries and seas, then cities, then towns.
 
 1. Pick a place by clicking the map, clicking a city or town name (this opens the 4-day panel straight away), or typing a name in the search bar and choosing a suggestion. Choosing a continent, country or state only moves the map there, since a forecast is for one point.
@@ -42,6 +48,15 @@ IFS forecast, 0.25°  ->  download total precipitation,   ->  meta.json         
 **3. Tile.** The grid has 721 by 1440 points (about 25 km apart). It is cut into 648 tiles of 10° by 10°, each saved as one gzip-compressed JSON file holding every field for every grid point in it. The browser unpacks the file itself.
 
 **3b. Draw.** The script also saves one small picture of the globe per 3-hour block, coloured by rain amount and transparent below 1 mm. Its rows are re-sampled to the web map's projection so the rain lines up with the coastlines. The page lays the picture for the current block over the map. The picture is for display only: clicks and forecast numbers still come from the tiles.
+
+A second set of pictures colours the same areas (1 mm or more) by precipitation type:
+- **Freezing rain or Ice pellets** where the model's precipitation type (`ptype`) at the block's end shows it.
+- **Otherwise by snow share** (`sf` ÷ `tp`):
+  - Snow when at least 80% is snow
+  - Rain and snow when over 20%
+  - Rain otherwise
+
+This is the same rule the summary box and the day cards use.
 
 **4. Publish.** A GitHub Actions job runs the script four times a day, runs the output checks, and publishes the page and the data to GitHub Pages. If any step fails, nothing is published and the site keeps its previous data.
 

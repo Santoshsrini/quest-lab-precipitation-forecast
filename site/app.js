@@ -1004,6 +1004,10 @@ document.getElementById("panel-close").addEventListener("click", clearSelection)
 const legend = document.getElementById("legend");
 const legendWhen = document.getElementById("legend-when");
 let shownBlock = null;          // the block whose picture is on the map
+// Which map: "amount" colours by mm, "type" by rain, snow and so on. The
+// viewer's last choice is remembered in this browser only.
+let mapMode = "amount";
+try { if (localStorage.getItem("mapMode") === "type") mapMode = "type"; } catch (error) { /* ignore */ }
 
 async function startRain() {
   try {
@@ -1012,8 +1016,10 @@ async function startRain() {
     return;                     // no forecast files: the plain map still works
   }
   if (!meta.pictures) return;
-  buildLegend();
-  showRainForNow();
+  // Older data has no type pictures: keep to the rain amount map.
+  if (!typeInfo()) mapMode = "amount";
+  else modeSwitch.hidden = false;
+  setMapMode(mapMode);
   setInterval(showRainForNow, 60 * 1000);     // move on when the next block begins
 }
 
@@ -1030,7 +1036,8 @@ function showRainForNow() {
 
   const p = meta.pictures;
   // "?made=" makes the browser fetch the new picture when the data is remade.
-  const url = `data/${rainInfo().pictures}/b${String(k).padStart(2, "0")}.png?made=${meta.made}`;
+  const folder = mapMode === "type" ? typeInfo().pictures : rainInfo().pictures;
+  const url = `data/${folder}/b${String(k).padStart(2, "0")}.png?made=${meta.made}`;
   const corners = [[p.west, p.north], [p.east, p.north], [p.east, p.south], [p.west, p.south]];
 
   if (map.getSource("rain")) {
@@ -1046,18 +1053,55 @@ function showRainForNow() {
     }, above ? above.id : undefined);
   }
   // The map covers the whole globe, so its times are in the viewer's own zone.
-  legendWhen.textContent = `Rain, ${formatTime(blockStart(k))} to ${formatTime(blockStart(k + 1))}`;
+  legendWhen.textContent = `${mapMode === "type" ? "Rain type" : "Rain"}, ` +
+    `${formatTime(blockStart(k))} to ${formatTime(blockStart(k + 1))}`;
 }
 
-// The colour key, built from the same table the data script used.
+// The colour key, built from the same tables the data script used.
 function buildLegend() {
   const bar = document.getElementById("legend-bar");
-  bar.replaceChildren(...rainInfo().colours.map((c) => {
-    const step = el("div", "legend-step");
-    const swatch = el("div", "legend-swatch");
-    swatch.style.background = c.colour;
-    step.append(swatch, el("div", "legend-number", String(c.from)));
-    return step;
-  }));
+  const unit = document.getElementById("legend-unit");
+  bar.classList.toggle("types", mapMode === "type");
+  if (mapMode === "type") {
+    const info = typeInfo();
+    bar.replaceChildren(...info.types.map((t) => {
+      const item = el("div", "legend-type");
+      const swatch = el("i");
+      swatch.style.background = t.colour;
+      item.append(swatch, t.name);
+      return item;
+    }));
+    unit.textContent = `where ${info.from_mm} mm or more falls in 3 hours`;
+  } else {
+    bar.replaceChildren(...rainInfo().colours.map((c) => {
+      const step = el("div", "legend-step");
+      const swatch = el("div", "legend-swatch");
+      swatch.style.background = c.colour;
+      step.append(swatch, el("div", "legend-number", String(c.from)));
+      return step;
+    }));
+    unit.textContent = "mm per 3 hours";
+  }
   legend.hidden = false;
+}
+
+// ---- the switch between the two maps: rain amount (mm) or rain type
+
+const typeInfo = () => meta.parameters.find((p) => p.id === "type");
+const modeSwitch = document.getElementById("mode");
+
+function setMapMode(mode) {
+  mapMode = mode;
+  try { localStorage.setItem("mapMode", mode); } catch (error) { /* private window: not remembered */ }
+  for (const button of modeSwitch.querySelectorAll("button")) {
+    button.setAttribute("aria-pressed", String(button.dataset.mode === mode));
+  }
+  if (!meta || !meta.pictures) return;
+  buildLegend();
+  shownBlock = null;              // redraw the picture for the same block
+  showRainForNow();
+}
+
+for (const button of modeSwitch.querySelectorAll("button")) {
+  button.addEventListener("click", () => setMapMode(button.dataset.mode));
 }

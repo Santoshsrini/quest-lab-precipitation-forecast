@@ -161,6 +161,64 @@ dry = np.argwhere(rain[0, 24:697, :] == 0)[0]
 dry_pixel = pixel_for(float(grid_lat[dry[0] + 24]), float(grid_lon[dry[1]]))
 check("a dry point is transparent", int(images[0][dry_pixel]) == 0)
 
+# ---- the precipitation type pictures (the second map)
+type_meta = next(p for p in meta["parameters"] if p["id"] == ff.TYPES)
+type_pictures = sorted((ff.DATA / type_meta["pictures"]).glob("b*.png"))
+check(f"{ff.BLOCKS} precipitation type pictures", len(type_pictures) == ff.BLOCKS,
+      f"found {len(type_pictures)}")
+type_images = [np.array(Image.open(p)) for p in type_pictures]
+check("every type picture is 1440 x 1440",
+      all(image.shape == (ff.PICTURE_SIZE, ff.PICTURE_SIZE) for image in type_images))
+check("meta.json lists the five types in the pictures' colour order",
+      [t["name"] for t in type_meta["types"]] ==
+      ["Rain", "Rain and snow", "Snow", "Freezing rain", "Ice pellets"])
+
+
+def tile_value(name, row, col, block):
+    """One stored value, read from the tiles the way the page reads them."""
+    tile_row, tile_col = min(row // 40, 17), col // 40
+    t = tiles[(tile_row, tile_col)]
+    return t["fields"][name][(row - tile_row * 40) * t["cols"] + (col - tile_col * 40)][block]
+
+
+def expected_type(tp, sf, wx):
+    """The type rule written out again, separately from the script:
+    0 none, 1 rain, 2 rain and snow, 3 snow, 4 freezing rain, 5 ice pellets."""
+    if tp < 10:
+        return 0                                    # under 1 mm: not coloured
+    if wx // 2 == 1:
+        return 4
+    if wx // 2 == 2:
+        return 5
+    share = sf / tp
+    return 3 if share >= 0.8 else 2 if share > 0.2 else 1
+
+
+wrong = 0
+seen = set()
+for _ in range(5000):
+    block = int(rng.integers(0, ff.BLOCKS))
+    row = int(rng.integers(24, 697))
+    col = int(rng.integers(0, 1440))
+    want = expected_type(*(tile_value(n, row, col, block) for n in ("tp", "sf", "wx")))
+    seen.add(want)
+    if int(type_images[block][pixel_for(float(grid_lat[row]), float(grid_lon[col]))]) != want:
+        wrong += 1
+check("type picture colours match the stored tp, sf and wx: 5000 random grid points",
+      wrong == 0, f"{wrong} wrong; types seen {sorted(seen)}")
+# Wet points only, so that every type gets tested, including the rare ones.
+wrong = 0
+counts = {}
+for block in range(0, ff.BLOCKS, 6):
+    for row, col in np.argwhere(rain[block, 24:697, :] >= 10)[::400]:
+        row = int(row) + 24
+        want = expected_type(*(tile_value(n, row, int(col), block) for n in ("tp", "sf", "wx")))
+        counts[want] = counts.get(want, 0) + 1
+        if int(type_images[block][pixel_for(float(grid_lat[row]), float(grid_lon[col]))]) != want:
+            wrong += 1
+check("type picture colours match at wet points", wrong == 0,
+      f"{wrong} wrong of {sum(counts.values())}; by type {dict(sorted(counts.items()))}")
+
 # ---- the day-card fields
 def field(name):
     return np.concatenate([np.array(t["fields"][name]).reshape(-1) for t in tiles.values()])
