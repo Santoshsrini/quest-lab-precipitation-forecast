@@ -46,7 +46,7 @@ cd site && python3 -m http.server 8000
 - ECMWF publishes about 7 h after a run starts; the cron times follow that.
 - High can be 1 °C below low after rounding; the check allows −1.
 - OpenFreeMap's style draws no continent/ocean labels: added in `setLabelLevels`; oceans are filed as class "sea", so they are picked by name.
-- Open bug: `meta.json` loads once, so a page left open across an update mixes old times with new files until reloaded.
+- Tiles and pictures must be read with the `meta.json` they were made with: `checkForNewData()` re-fetches it (no-store) before any new tile or picture and every 5 min, and resets everything if `made` changed.
 
 ## Working with Santosh
 

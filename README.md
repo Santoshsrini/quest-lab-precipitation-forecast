@@ -122,7 +122,10 @@ Earlier, by hand (15 Nov 2026, recorded in [docs/backend-data-processing.md](doc
 - **Card conditions are worked out, not forecast directly.** Snow when snowfall is at least 80% of the day's total, Rain and snow when over 20%, Showers when at least half the rain is showery. ECMWF Open Data has no thunderstorm field: "Storms likely" means the day has at least 5 mm, at least half of it showery, and storm energy of at least 1000 J/kg in some block.
 - **The chance of 10 mm+ can come from an older run, over a slightly different 24 hours.** ECMWF publishes these probabilities only from its 00 and 12 UTC ensemble runs, in 24-hour windows starting every 12 hours from that run's start. So the ensemble run can be older than the main run, and its window rarely matches the card's day exactly. Each card uses the window with the most overlap with its day; on a tie, the one that starts within the day. The card's line names the window's start (with the weekday if it starts on another day), and the panel names both runs.
 - **The forecast is 7 to 14 hours old when you see it.** ECMWF publishes each run about 7 hours after it starts, and a new run arrives every 6 hours.
-- **A page left open across a data update can mix old and new data.** The page loads `meta.json` once. After the next update it still uses the old run's times while downloading the new tiles and pictures, until it is reloaded. This is a known bug, not yet fixed.
+- **A page left open picks up new data on its own.**
+  - The page fetches `meta.json` again, bypassing the browser's cache, before it downloads a new tile or the next block's picture, and every 5 minutes.
+  - If the data has changed, it forgets the old files, redraws the map and refreshes the open box or panel.
+  - So a page open through an update can show the previous run for up to 5 minutes, but it never mixes one run's times with another run's values.
 - **Scheduled updates can pause.** GitHub stops scheduled jobs in a repository with no activity for 60 days. The job can be restarted from the Actions tab.
 
 ## Folder layout

@@ -465,8 +465,8 @@ clearButton.addEventListener("click", () => {
 // ============================================================ the forecast
 //
 // The data script (pipeline/fetch_forecast.py) saves the forecast as:
-//   data/meta.json             when the forecast starts, how many blocks
-//   data/tiles/r07_c25.json    the rain values, one file per 10 x 10 degrees
+//   data/meta.json               when the forecast starts, how many blocks
+//   data/tiles/r07_c25.json.gz   every field, one gzip file per 10 x 10 degrees
 // See docs/backend-data-processing.md for the layout.
 
 const HOUR_MS = 3600 * 1000;
@@ -476,10 +476,52 @@ const MIN_SCALE_MM = 5;       // a full-height bar is at least this much rain
 let meta = null;              // the contents of meta.json, once loaded
 const tileCache = new Map();  // tiles already downloaded, by file name
 
-async function fetchJson(url) {
-  const response = await fetch(url);
+async function fetchJson(url, options) {
+  const response = await fetch(url, options);
   if (!response.ok) throw new Error(`${url}: ${response.status}`);
   return response.json();
+}
+
+// ---- keeping up with new data
+//
+// The scheduled job replaces the data files several times a day. meta.json
+// says when the forecast starts, so the tiles and pictures must always be
+// read with the meta.json they were made with. Before reading a new tile or
+// picture, and every few minutes, the page asks for meta.json again
+// (bypassing the browser's cache). If it has changed, the page drops what it
+// downloaded, redraws the map and refreshes the open box or panel.
+const META_CHECK_MS = 5 * 60 * 1000;    // the regular check
+let metaCheckedAt = 0;
+
+async function loadMeta() {
+  meta = await fetchJson("data/meta.json", { cache: "no-store" });
+  metaCheckedAt = Date.now();
+}
+
+// Fetch meta.json again. Returns true if the data was remade since the
+// page last read it (meta is then the new one and old tiles are forgotten).
+async function checkForNewData() {
+  let fresh;
+  try {
+    fresh = await fetchJson("data/meta.json", { cache: "no-store" });
+  } catch (error) {
+    return false;               // offline for a moment: keep what we have
+  }
+  metaCheckedAt = Date.now();
+  if (!meta || fresh.made === meta.made) return false;
+  meta = fresh;
+  tileCache.clear();
+  return true;
+}
+
+// After new data: redraw the map colours and legend for the new run.
+function redrawMapForNewData() {
+  if (!meta.pictures || !map.getSource("rain")) return;
+  if (!typeInfo()) mapMode = "amount";
+  else paintModeIcons();
+  buildLegend();
+  shownBlock = null;
+  showRainForNow();
 }
 
 // Which tile holds the grid point nearest to this place, and where in the
@@ -517,10 +559,19 @@ async function fetchGzipJson(url) {
 //              (hazard at the block's end: 0 none, 1 freezing rain or drizzle, 2 ice pellets)
 //   p10      ensemble chance of 10 mm or more, % per 24-hour window
 async function loadPoint(lat, lon) {
-  if (!meta) meta = await fetchJson("data/meta.json");
-  const { file, position } = findPoint(lat, lon);
-  const url = `data/${meta.tiles}/${file}?made=${meta.made}`;
-  if (!tileCache.has(url)) tileCache.set(url, await fetchGzipJson(url));
+  if (!meta) await loadMeta();
+  let { file, position } = findPoint(lat, lon);
+  let url = `data/${meta.tiles}/${file}?made=${meta.made}`;
+  if (!tileCache.has(url)) {
+    // About to download a tile: first make sure meta.json is still the
+    // current one, so the tile and its times come from the same run.
+    if (await checkForNewData()) {
+      redrawMapForNewData();
+      ({ file, position } = findPoint(lat, lon));
+      url = `data/${meta.tiles}/${file}?made=${meta.made}`;
+    }
+    tileCache.set(url, await fetchGzipJson(url));
+  }
   const f = tileCache.get(url).fields;
   const at = (name) => f[name][position];
   return {
@@ -1042,7 +1093,7 @@ document.getElementById("panel-close").addEventListener("click", clearSelection)
 // ========================================================= rain on the map
 //
 // The data script also saves one picture of the globe per 3-hour block
-// (data/rain/b00.png, b01.png, ...), coloured by the amount of rain. The
+// (data/tp/pictures/b00.png ..., or data/type/pictures/ for the type map). The
 // picture for the block that contains the present moment is laid over the
 // map. It is only a picture: clicks still go to the map, and the numbers
 // in the summary box and the panel still come from the tiles.
@@ -1057,7 +1108,7 @@ try { if (localStorage.getItem("mapMode") === "type") mapMode = "type"; } catch 
 
 async function startRain() {
   try {
-    if (!meta) meta = await fetchJson("data/meta.json");
+    if (!meta) await loadMeta();
   } catch (error) {
     return;                     // no forecast files: the plain map still works
   }
@@ -1069,7 +1120,21 @@ async function startRain() {
     modeSwitch.hidden = false;
   }
   setMapMode(mapMode);
-  setInterval(showRainForNow, 60 * 1000);     // move on when the next block begins
+  setInterval(keepUp, 60 * 1000);
+}
+
+// Every minute: look for new data every few minutes, or when the next block
+// begins (its picture is about to be downloaded); then show the current block.
+async function keepUp() {
+  const nextBlock = currentBlock() !== shownBlock;
+  if (nextBlock || Date.now() - metaCheckedAt >= META_CHECK_MS) {
+    if (await checkForNewData()) {
+      redrawMapForNewData();
+      if (selected) showForecast();          // the box or panel, from the new run
+      return;
+    }
+  }
+  showRainForNow();
 }
 
 function showRainForNow() {
